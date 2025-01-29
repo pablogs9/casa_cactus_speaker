@@ -4,8 +4,10 @@
     "active_layer_preset": "",
     "auto_track_width": true,
     "hidden_netclasses": [],
-    "hidden_nets": [],
-    "high_contrast_mode": 0,
+    "hidden_nets": [
+      "GND"
+    ],
+    "high_contrast_mode": 1,
     "net_color_mode": 2,
     "opacity": {
       "images": 0.6,
@@ -64,7 +66,7 @@
       39,
       40
     ],
-    "visible_layers": "9fdffff_ffffffff",
+    "visible_layers": "9fcffff_ffffffff",
     "zone_display_mode": 0
   },
   "git": {

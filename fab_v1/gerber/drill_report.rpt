@@ -1,5 +1,5 @@
 Drill report for kicad_makespace_tutorial.kicad_pcb
-Created on 2024-12-31T17:49:22+0100
+Created on 2025-01-23T17:55:28+0100
 
 Copper Layer Stackup:
     =============================================================
@@ -10,14 +10,14 @@ Copper Layer Stackup:
 Drill file 'kicad_makespace_tutorial.drl' contains
     plated through holes:
     =============================================================
-    T1  0.200mm  0.0079"  (34 holes)
-    T2  0.300mm  0.0118"  (43 holes)
+    T1  0.200mm  0.0079"  (31 holes)
+    T2  0.300mm  0.0118"  (72 holes)
     T3  0.750mm  0.0295"  (2 holes)
     T4  0.800mm  0.0315"  (4 holes)  (with 4 slots)
     T5  1.200mm  0.0472"  (2 holes)
     T6  2.700mm  0.1063"  (2 holes)
 
-    Total plated holes count 87
+    Total plated holes count 113
 
 
 Not plated through holes are merged with plated holes
