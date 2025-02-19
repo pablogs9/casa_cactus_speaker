@@ -4541,6 +4541,12 @@
 		(uuid "f6d77f82-3e58-40e9-ba17-a355646d473a")
 	)
 	(junction
+		(at 165.1 151.13)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "fab43127-eed7-4c87-946a-b67cc79f8d45")
+	)
+	(junction
 		(at 337.82 81.28)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -4648,7 +4654,7 @@
 	)
 	(wire
 		(pts
-			(xy 179.07 151.13) (xy 193.04 151.13)
+			(xy 156.21 151.13) (xy 165.1 151.13)
 		)
 		(stroke
 			(width 0)
@@ -4895,6 +4901,16 @@
 			(type default)
 		)
 		(uuid "33434a5c-3f57-4611-9e3e-60b502479330")
+	)
+	(wire
+		(pts
+			(xy 165.1 138.43) (xy 165.1 140.97)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "349430e2-df72-4729-a7fa-10e09d4fad7c")
 	)
 	(wire
 		(pts
@@ -5175,6 +5191,16 @@
 			(type default)
 		)
 		(uuid "62ecba25-0772-40a5-a2a9-28174e48fc09")
+	)
+	(wire
+		(pts
+			(xy 165.1 151.13) (xy 193.04 151.13)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "6568dd73-8f10-4913-849f-3c18f3abe387")
 	)
 	(wire
 		(pts
@@ -7967,7 +7993,7 @@
 		(uuid "4235a743-51dd-4210-9bca-44c9ec4a485f")
 	)
 	(label "ESP_EN"
-		(at 179.07 151.13 0)
+		(at 156.21 151.13 0)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -8445,6 +8471,16 @@
 			(justify left bottom)
 		)
 		(uuid "e15441ea-271d-4fda-8f4f-e2f708319204")
+	)
+	(label "3V3"
+		(at 165.1 138.43 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "ea095965-a4d3-4085-a5a6-4e3a8910516a")
 	)
 	(label "ESP_LED"
 		(at 219.71 111.76 0)
@@ -12263,6 +12299,85 @@
 			(project "kicad_makespace_tutorial"
 				(path "/6e6169dc-bc5d-4a4e-95fd-65529ef4ae3e"
 					(reference "#PWR02")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "easyeda2kicad:0805W8F1000T5E")
+		(at 165.1 146.05 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "bb1c1bb8-7423-46d5-b079-f678e1a1b102")
+		(property "Reference" "R1"
+			(at 167.64 144.7799 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "100"
+			(at 167.64 147.3199 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "easyeda2kicad:R0805"
+			(at 172.72 146.05 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://lcsc.com/product-detail/Chip-Resistor-Surface-Mount-UniOhm_100R-1000-1_C17408.html"
+			(at 175.26 146.05 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 165.1 146.05 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC Part" "C17408"
+			(at 177.8 146.05 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "b6d88112-7f72-410c-b139-6a7c58d948e6")
+		)
+		(pin "1"
+			(uuid "855b482c-38c7-4900-a532-8853ac631a62")
+		)
+		(instances
+			(project "kicad_makespace_tutorial"
+				(path "/6e6169dc-bc5d-4a4e-95fd-65529ef4ae3e"
+					(reference "R1")
 					(unit 1)
 				)
 			)
