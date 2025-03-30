@@ -1,0 +1,41 @@
+name: Uncrustify Formatter
+
+on:
+  pull_request:
+
+jobs:
+  FormatCode:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout the repository with full history so pushes work correctly.
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          submodules: 'true'
+
+      # Install uncrustify (adjust package installation if needed)
+      - name: Install uncrustify
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y uncrustify
+
+      # Run uncrustify over the desired file types using your configuration file (uncrustify.cfg)
+      - name: Run uncrustify
+        shell: bash
+        run: |
+          uncrustify -c uncrustify.cfg --replace $(find . -type f \( -name "*.cpp" -or -name "*.h" -or -name "*.hpp" \)) --no-backup
+
+      # Check if any files have been modified by uncrustify, then commit and push the formatting changes.
+      - name: Commit and push formatting changes
+        run: |
+          # Check if there are any changes
+          if [ -n "$(git status --porcelain)" ]; then
+            git config --global user.email "action@github.com"
+            git config --global user.name "GitHub Action"
+            git commit -am "Apply code formatting with uncrustify"
+            # Push using the provided GITHUB_TOKEN (available by default)
+            git push origin HEAD:${{ github.head_ref }}
+          else
+            echo "No formatting changes detected."
+          fi
