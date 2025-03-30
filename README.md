@@ -1,6 +1,7 @@
 # Casa Cactus Speaker
 
 ![3d](images/3D.png)
+![Render](images/Render.png)
 
 Repository for a project featuring an ESP32-S3 and an I2S Class D amplifier for audio playback.
 
