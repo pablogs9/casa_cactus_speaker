@@ -8,5 +8,6 @@ add_executable(cspot_ng main.cpp)
 
 # Add include directories
 include_directories(
+    ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/nanopb
 )
