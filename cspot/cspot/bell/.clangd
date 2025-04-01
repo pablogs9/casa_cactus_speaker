@@ -1,0 +1,2 @@
+CompileFlags:
+   CompilationDatabase: examples/dsp/build      # Search build/ directory for compile_commands.json
