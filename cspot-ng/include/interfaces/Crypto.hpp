@@ -11,6 +11,7 @@ namespace cspot_ng
     struct Crypto
     {
         virtual ByteArray decode_base64(const std::string& input) = 0;
+        virtual std::string encode_base64(const ByteArray& input) = 0;
         virtual ByteArray dh_calculate_shared_key(const ByteArray& remote_key) = 0;
 
         virtual void sha1_init() = 0;

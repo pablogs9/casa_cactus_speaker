@@ -5,7 +5,7 @@
 
 namespace cspot_ng
 {
-    struct mDNSProvided
+    struct MDNSProvider
     {
         virtual void initialize() = 0;
 

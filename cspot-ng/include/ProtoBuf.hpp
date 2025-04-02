@@ -37,9 +37,8 @@ namespace cspot_ng
             return buffer;
         }
 
-        static T decode(const ByteArray& data, const pb_msgdesc_t * fields)
+        static T decode(const ByteArray& data, const pb_msgdesc_t * fields, T& message)
         {
-            T message;
             pb_istream_t stream = pb_istream_from_buffer(data.data(), data.size());
 
             if (!pb_decode(&stream, fields, &message))

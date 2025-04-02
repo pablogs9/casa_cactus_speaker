@@ -1,6 +1,6 @@
 #pragma once
 
-#include <interfaces/mDNSProvider.hpp>
+#include <interfaces/MDNSProvider.hpp>
 #include <interfaces/HTTPServer.hpp>
 #include <interfaces/Crypto.hpp>
 
@@ -10,31 +10,12 @@ namespace cspot_ng
 {
     struct ZeroConf
     {
-        ZeroConf(mDNSProvided & mdns, HTTPServer & server, Crypto & crypto)
+        ZeroConf(MDNSProvider & mdns, HTTPServer & server, Crypto & crypto)
             : mdns_(mdns)
             , server_(server)
-            , device_name_("TESTNAME")
+            , device_name_("CSpot player")
             , login_blob_(device_name_, crypto)
         {
-            // ###############################
-            // ##### MDNS Initialization #####
-            // ###############################
-
-            // Initialize the mDNS service
-            mdns_.initialize();
-
-            // Set the hostname
-            mdns_.set_hostname(device_name_);
-
-            // Register the mDNS service
-            mdns_.register_service(
-                device_name_,
-                "_spotify-connect",
-                "_tcp",
-                "",
-                0,
-                {{"VERSION", "1.0"}, {"CPath", "/spotify_info"}, {"Stack", "SP"}});
-
             // #############################
             // ##### HTTP Server Setup #####
             // #############################
@@ -47,12 +28,14 @@ namespace cspot_ng
             server_.register_get_handler(
                 "/spotify_info",
                 [&](const std::string& request) {
-                    // Handle the GET request
+                    std::cout << "GET /spotify_info" << std::endl;
 
+                    // Handle the GET request
                     HTTPServer::HTTPResponse response;
                     response.status = 200;
                     response.headers["Content-Type"] = "application/json";
                     response.body = login_blob_.get_info();
+                    std::cout << "Response: " << response.body << std::endl;
                     return response;
                 });
 
@@ -60,6 +43,8 @@ namespace cspot_ng
             server_.register_post_handler(
                 "/spotify_info",
                 [&](const std::string& request) {
+                    std::cout << "POST /spotify_info" << std::endl;
+
                     // Feed the blob with the request data
                     auto info = HTTPServer::decode_query(request);
 
@@ -68,7 +53,6 @@ namespace cspot_ng
                         // Notify auth success
                         auth_success_ = true;
                     }
-
 
                     // Prepare the response
                     nlohmann::json obj;
@@ -88,6 +72,8 @@ namespace cspot_ng
             server_.register_get_handler(
                 "/close",
                 [&](const std::string& request) {
+                    std::cout << "GET /close" << std::endl;
+
                     // Handle the close request
                     closed_ = true;
 
@@ -97,6 +83,26 @@ namespace cspot_ng
                     response.body = "";
                     return response;
                 });
+
+            // ###############################
+            // ##### MDNS Initialization #####
+            // ###############################
+
+            // Initialize the mDNS service
+            mdns_.initialize();
+
+            // Set the hostname
+            mdns_.set_hostname("pgarrido");
+
+            // Register the mDNS service
+            mdns_.register_service(
+                device_name_,
+                "_spotify-connect",
+                "_tcp",
+                "",
+                server_port,
+                {{"VERSION", "1.0"}, {"CPath", "/spotify_info"}, {"Stack", "SP"}});
+
         }
 
         bool is_auth_success() const
@@ -109,8 +115,13 @@ namespace cspot_ng
             return closed_;
         }
 
+        const LoginBlob & get_blob() const
+        {
+            return login_blob_;
+        }
+
     private:
-        mDNSProvided & mdns_;
+        MDNSProvider & mdns_;
         HTTPServer & server_;
 
         const std::string device_name_;

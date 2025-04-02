@@ -23,10 +23,14 @@ namespace cspot_ng
             sprintf(hash, "%016zu", std::hash<std::string>{}(name));
             // base is 142137fd329622137a14901634264e6f332e2411
             device_id_ = std::string("142137fd329622137a149016") + std::string(hash);
+
+            crypto_.dh_init();
         }
 
         const std::string get_info() const
         {
+            auto encoded_key = crypto_.encode_base64(crypto_.public_key());
+
             nlohmann::json obj;
             obj["status"] = 101;
             obj["statusString"] = "OK";
@@ -46,7 +50,7 @@ namespace cspot_ng
             obj["activeUser"] = "";
             obj["deviceID"] = device_id_;
             obj["remoteName"] = name_;
-            obj["publicKey"] = encoded_key_;
+            obj["publicKey"] = encoded_key;
             obj["deviceType"] = "SPEAKER";
 
             return obj.dump();
@@ -57,27 +61,79 @@ namespace cspot_ng
             bool ret = false;
 
             // Ensure the data contains the required fields
-            if (data.find("username") != data.end() &&
+            if (data.find("userName") != data.end() &&
                 data.find("blob") != data.end() &&
                 data.find("clientKey") != data.end() &&
                 data.find("deviceName") != data.end())
             {
                 ret = true;
 
-                const auto username = data.find("username")->second;
+                const auto username = data.find("userName")->second;
                 const auto blob_string  = data.find("blob")->second;
                 const auto client_key_string = data.find("clientKey")->second;
                 const auto device_name = data.find("deviceName")->second;
 
                 const auto client_key = crypto_.decode_base64(client_key_string);
+                std::cout << "!!!!! CLIENT_KEY_BYTES: " << std::endl;
+                std::cout << "-------------------------" << std::endl;
+                for(size_t i = 0; i < client_key.size(); i++) {
+                  printf("%02X ", client_key[i]);
+
+                  if ((i + 1) % 16 == 0) {
+                    std::cout << std::endl;
+                  }
+                }
+                std::cout << std::endl;
                 const auto blob = crypto_.decode_base64(blob_string);
+
+                std::cout << "!!!!! BLOB_BYTES: " << std::endl;
+                std::cout << "-------------------------" << std::endl;
+                for(size_t i = 0; i < blob.size(); i++) {
+                    printf("%02X ", blob[i]);
+
+                    if ((i + 1) % 16 == 0) {
+                    std::cout << std::endl;
+                    }
+                }
+                std::cout << std::endl;
 
                 const auto shared_key = crypto_.dh_calculate_shared_key(client_key);
 
-                process_blob(blob, shared_key, device_name, username);
+                std::cout << "!!!!! SECRET_KEY: " << std::endl;
+                std::cout << "-------------------------" << std::endl;
+                for(size_t i = 0; i < shared_key.size(); i++) {
+                    printf("%02X ", shared_key[i]);
+
+                    if ((i + 1) % 16 == 0) {
+                    std::cout << std::endl;
+                    }
+                }
+                std::cout << std::endl;
+
+                process_blob(blob, shared_key, device_id_, username);
             }
 
             return ret;
+        }
+
+        const std::string & username() const
+        {
+            return username_;
+        }
+
+        const ByteArray & auth_data() const
+        {
+            return auth_data_;
+        }
+
+        int auth_type() const
+        {
+            return auth_type_;
+        }
+
+        const std::string & device_id() const
+        {
+            return device_id_;
         }
 
     private:
@@ -91,55 +147,44 @@ namespace cspot_ng
             const auto part_decoded = decode_blob(blob, shared_key);
             const auto login_data = decode_blob_secondary(part_decoded, username, device_id);
 
-            struct BlobReader
-            {
-                BlobReader(const ByteArray& data)
-                    : data_(data)
-                    , position_(0)
-                {}
+            std::cout << "!!!!! LOGIN_DATA: " << std::endl;
+            std::cout << "-------------------------" << std::endl;
+            for(size_t i = 0; i < login_data.size(); i++) {
+              printf("%02X ", login_data[i]);
 
-                uint32_t read_int()
-                {
-                    auto low = data_[position_];
-                    if ((int)(low & 0x80) == 0)
-                    {
-                        position_ += 1;
-                        return low;
-                    }
+              if ((i + 1) % 16 == 0) {
+                std::cout << std::endl;
+              }
+            }
+            std::cout << std::endl;
 
-                    auto high = data_[position_ + 1];
-                    position_ += 2;
-
-                    return (uint32_t)((low & 0x7f) | (high << 7));
+            auto read_blob_int = [](const ByteArray& data, size_t& pos) -> uint32_t {
+                auto lo = data[pos];
+                if ((int)(lo & 0x80) == 0) {
+                    pos += 1;
+                    return lo;
                 }
 
-                void skip(size_t bytes)
-                {
-                    position_ += bytes;
-                }
+                auto hi = data[pos + 1];
+                pos += 2;
 
-                size_t position() const
-                {
-                    return position_;
-                }
+                uint32_t ret = (uint32_t)((lo & 0x7f) | (hi << 7));
 
-            private:
-                const ByteArray& data_;
-                size_t position_;
+                return ret;
             };
 
-            BlobReader reader(login_data);
-            reader.skip(1);
-            reader.skip(reader.read_int());
-            reader.skip(1);
-            auth_type_ = reader.read_int();
-            reader.skip(1);
-            auto auth_size = reader.read_int();
+            // Parse blob - using the same approach as the original implementation
+            size_t blob_position = 1;
+            blob_position += read_blob_int(login_data, blob_position);
+            blob_position += 1;
+            auth_type_ = read_blob_int(login_data, blob_position);
+            blob_position += 1;
+            auto auth_size = read_blob_int(login_data, blob_position);
 
             username_ = username;
             auth_data_ = ByteArray(
-                login_data.begin() + reader.position(),
-                login_data.begin() + reader.position() + auth_size);
+                login_data.begin() + blob_position,
+                login_data.begin() + blob_position + auth_size);
         }
 
         ByteArray decode_blob(
@@ -168,8 +213,9 @@ namespace cspot_ng
 
             if (mac != checksum)
             {
-                // Error: MAC doesn't match
-                while(1){}
+                // Log error but continue - don't halt with infinite loop
+                std::cerr << "Mac doesn't match!" << std::endl;
+                return ByteArray();
             }
 
             encryption_key = ByteArray(encryption_key.begin(), encryption_key.begin() + IV_SIZE);
@@ -215,7 +261,6 @@ namespace cspot_ng
         std::string name_;
         std::string username_;
         std::string device_id_;
-        std::string encoded_key_;
 
         int auth_type_ = 0;
         ByteArray auth_data_;
