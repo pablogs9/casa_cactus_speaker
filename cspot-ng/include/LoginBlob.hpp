@@ -74,41 +74,9 @@ namespace cspot_ng
                 const auto device_name = data.find("deviceName")->second;
 
                 const auto client_key = crypto_.decode_base64(client_key_string);
-                std::cout << "!!!!! CLIENT_KEY_BYTES: " << std::endl;
-                std::cout << "-------------------------" << std::endl;
-                for(size_t i = 0; i < client_key.size(); i++) {
-                  printf("%02X ", client_key[i]);
-
-                  if ((i + 1) % 16 == 0) {
-                    std::cout << std::endl;
-                  }
-                }
-                std::cout << std::endl;
                 const auto blob = crypto_.decode_base64(blob_string);
 
-                std::cout << "!!!!! BLOB_BYTES: " << std::endl;
-                std::cout << "-------------------------" << std::endl;
-                for(size_t i = 0; i < blob.size(); i++) {
-                    printf("%02X ", blob[i]);
-
-                    if ((i + 1) % 16 == 0) {
-                    std::cout << std::endl;
-                    }
-                }
-                std::cout << std::endl;
-
                 const auto shared_key = crypto_.dh_calculate_shared_key(client_key);
-
-                std::cout << "!!!!! SECRET_KEY: " << std::endl;
-                std::cout << "-------------------------" << std::endl;
-                for(size_t i = 0; i < shared_key.size(); i++) {
-                    printf("%02X ", shared_key[i]);
-
-                    if ((i + 1) % 16 == 0) {
-                    std::cout << std::endl;
-                    }
-                }
-                std::cout << std::endl;
 
                 process_blob(blob, shared_key, device_id_, username);
             }
@@ -146,17 +114,6 @@ namespace cspot_ng
         {
             const auto part_decoded = decode_blob(blob, shared_key);
             const auto login_data = decode_blob_secondary(part_decoded, username, device_id);
-
-            std::cout << "!!!!! LOGIN_DATA: " << std::endl;
-            std::cout << "-------------------------" << std::endl;
-            for(size_t i = 0; i < login_data.size(); i++) {
-              printf("%02X ", login_data[i]);
-
-              if ((i + 1) % 16 == 0) {
-                std::cout << std::endl;
-              }
-            }
-            std::cout << std::endl;
 
             auto read_blob_int = [](const ByteArray& data, size_t& pos) -> uint32_t {
                 auto lo = data[pos];

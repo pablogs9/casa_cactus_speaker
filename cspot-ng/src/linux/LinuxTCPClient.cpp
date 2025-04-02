@@ -1,6 +1,8 @@
 #include <linux/LinuxTCPClient.hpp>
+
 #include <iostream>
 #include <cstring>
+#include <chrono>
 
 #include <netinet/tcp.h>
 #include <errno.h>
@@ -77,8 +79,6 @@ namespace cspot_ng
             throw std::runtime_error("Not connected");
         }
 
-        std::cout << "Sending " << data.size() << " bytes" << std::endl;
-
         size_t total_sent = 0;
         int retries = 0;
 
@@ -109,51 +109,54 @@ namespace cspot_ng
         }
     }
 
-    ByteArray LinuxTCPClient::receive(size_t max_size, size_t timeout_ms)
+    ByteArray LinuxTCPClient::receive(size_t max_size)
     {
         if (!m_connected) {
             throw std::runtime_error("Not connected");
         }
 
-        std::cout << "Receiving up to " << max_size << " bytes" << std::endl;
+        bool max_size_set = max_size != 0;
+        max_size = max_size == 0 ? 4096 : max_size; // Default to 4096 if no size specified
+
         ByteArray buffer(max_size);
         ssize_t bytes_read = 0;
-        unsigned int idx = 0;
+        unsigned int total_read = 0;
         int retries = 0;
 
-        while (idx < max_size) {
-            bytes_read = recv(m_socket, buffer.data() + idx, max_size - idx, 0);
+        while (total_read < max_size) {
+            bytes_read = recv(m_socket, buffer.data() + total_read, max_size - total_read, 0);
 
-            std::cout << "Received " << bytes_read << " bytes" << std::endl;
             if (bytes_read <= 0) {
                 if (errno == EAGAIN || errno == ETIMEDOUT) {
-                    // Mimicking cspot's timeout handling
+                    // Handle timeout
                     if (retries++ > 4) {
                         throw std::runtime_error("Receive timeout");
                     }
+                    continue; // Retry
                 } else if (errno == EINTR) {
+                    continue; // Interrupted, try again
                 } else if (bytes_read == 0) {
-                    // Connection closed
-                    m_connected = false;
-                    if (idx == 0) {
-                        return ByteArray(); // Nothing received
-                    }
-                    break; // Return what we have so far
+                    // Connection closed by peer
+                    throw std::runtime_error("Connection closed by peer");
                 } else {
                     // Other errors
                     if (retries++ > 4) {
                         throw std::runtime_error(std::string("Receive error: ") + strerror(errno));
                     }
+                    continue; // Retry a few times
                 }
             }
 
-            idx += bytes_read;
+            total_read += bytes_read;
 
-            break;
-            if (timeout_ms == 0) break; // If no timeout specified, just return what we got
+            // If max_size wasn't explicitly set (was 0), exit after first successful read
+            if (!max_size_set) {
+                break;
+            }
         }
 
-        buffer.resize(idx);
+        // Resize the buffer to match the actual amount of data read
+        buffer.resize(total_read);
         return buffer;
     }
 

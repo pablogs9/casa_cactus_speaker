@@ -35,7 +35,6 @@ namespace cspot_ng
                     response.status = 200;
                     response.headers["Content-Type"] = "application/json";
                     response.body = login_blob_.get_info();
-                    std::cout << "Response: " << response.body << std::endl;
                     return response;
                 });
 

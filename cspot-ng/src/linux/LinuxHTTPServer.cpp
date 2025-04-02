@@ -101,8 +101,6 @@ namespace cspot_ng
 
     void LinuxHTTPServer::handle_client(int client_socket)
     {
-        std::cout << "Client connected: " << client_socket << std::endl;
-
         // Read request
         std::vector<char> buffer(4096);
         ssize_t bytes_read = ::recv(client_socket, buffer.data(), buffer.size(), 0);

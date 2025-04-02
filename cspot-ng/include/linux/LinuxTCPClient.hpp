@@ -21,7 +21,7 @@ namespace cspot_ng
 
         bool connect(const std::string& host, uint16_t port) override;
         void send(const ByteArray& data) override;
-        ByteArray receive(size_t max_size, size_t timeout_ms = 0) override;
+        ByteArray receive(size_t max_size = 0) override;
         void close() override;
 
     private:

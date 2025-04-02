@@ -39,63 +39,22 @@ namespace cspot_ng
 
         void send(const ShannonPacket& packet)
         {
-            static int i = 0;
-
             // Create a copy of the data that we can encrypt
             ByteArray encrypted_data = packet.get_raw();
-
-            std::cout << "!!!!! CYPHER RAW: " << i << std::endl;
-            std::cout << "-------------------------" << std::endl;
-            for(size_t i = 0; i < encrypted_data.size(); i++) {
-              printf("%02X ", encrypted_data[i]);
-
-              if ((i + 1) % 16 == 0) {
-                std::cout << std::endl;
-              }
-            }
-            std::cout << std::endl;
 
             // Shannon encrypt the packet
             send_cipher_.encrypt(encrypted_data);
 
-            std::cout << "!!!!! CYPHER ENCRYPT: " << i << std::endl;
-            std::cout << "-------------------------" << std::endl;
-            for(size_t i = 0; i < encrypted_data.size(); i++) {
-              printf("%02X ", encrypted_data[i]);
-
-              if ((i + 1) % 16 == 0) {
-                std::cout << std::endl;
-              }
-            }
-            std::cout << std::endl;
-
-            // tcp_client_.send(encrypted_data);
-
             // Generate MAC
             ByteArray mac(4); // MAC_SIZE is 4 bytes
             send_cipher_.finish(mac);
-
-            std::cout << "!!!!! CYPHER MAC: " << i << std::endl;
-            std::cout << "-------------------------" << std::endl;
-            for(size_t i = 0; i < mac.size(); i++) {
-              printf("%02X ", mac[i]);
-
-              if ((i + 1) % 16 == 0) {
-                std::cout << std::endl;
-              }
-            }
-            std::cout << std::endl;
-
-            i++;
 
             // Update the nonce
             send_nonce_ += 1;
             auto nonce_vec = uint32_to_vector(htonl(send_nonce_));
             send_cipher_.nonce(nonce_vec);
 
-            // Send the MAC
-            // tcp_client_.send(mac);
-
+            // Generate the complete message
             auto complete_msg = ByteArray();
             complete_msg.reserve(encrypted_data.size() + mac.size());
             complete_msg.insert(complete_msg.end(), encrypted_data.begin(), encrypted_data.end());
@@ -103,10 +62,10 @@ namespace cspot_ng
             tcp_client_.send(complete_msg);
         }
 
-        ShannonPacket receive(size_t timeout_ms = 1000)
+        ShannonPacket receive()
         {
             // Receive the initial 3 bytes (command + size)
-            ByteArray header = tcp_client_.receive(3, timeout_ms);
+            ByteArray header = tcp_client_.receive(3);
 
             if (header.size() < 3)
             {
@@ -125,13 +84,13 @@ namespace cspot_ng
             ShannonPacket packet;
             packet.command = command;
 
-            packet.data = tcp_client_.receive(size, timeout_ms);
+            packet.data = tcp_client_.receive(size);
 
             // Decrypt the data
             recv_cipher_.decrypt(packet.data);
 
             // Receive the MAC
-            ByteArray mac = tcp_client_.receive(4, timeout_ms);
+            ByteArray mac = tcp_client_.receive(4);
 
             // Generate MAC for verification
             ByteArray calculated_mac(4); // MAC_SIZE is 4 bytes

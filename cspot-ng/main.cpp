@@ -52,6 +52,15 @@ int main()
         std::cerr << "Authentication failed" << std::endl;
         return -1;
     }
+    else
+    {
+        std::cout << "Authentication successful, token: ";
+        for (const auto& byte : token)
+        {
+            std::cout << std::hex << static_cast<int>(byte);
+        }
+        std::cout << std::dec << std::endl;
+    }
 
     while (!zeroconf.is_closed())
     {

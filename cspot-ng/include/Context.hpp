@@ -47,7 +47,6 @@ namespace cspot_ng
 
                 // Wrap the TCP connection with Shannon encryption
                 shannon_tcp_client_.wrap_connection(shan_send_key_, shan_recv_key_);
-                std::cout << "Shannon connection established with keys:" << std::endl;
             }
 
             return ret;
@@ -70,14 +69,6 @@ namespace cspot_ng
             packet.command = LOGIN_REQUEST_COMMAND;
             packet.data = generate_auth_request();
 
-            // Print the authentication request
-            std::cout << "Authentication request: ";
-            for (const auto & byte : packet.data)
-            {
-                std::cout << std::hex << static_cast<int>(byte) << " ";
-            }
-            std::cout << std::endl;
-
             shannon_tcp_client_.send(packet);
 
             // Receive the response
@@ -85,12 +76,10 @@ namespace cspot_ng
 
             if (response.command == AUTH_SUCCESSFUL_COMMAND)
             {
-                std::cout << "Authentication successful" << std::endl;
                 return response.data;
             }
             else if (response.command == AUTH_DECLINED_COMMAND)
             {
-                std::cerr << "Authentication declined" << std::endl;
                 return {};
             }
             else if (response.data.empty())
