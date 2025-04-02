@@ -78,19 +78,38 @@ namespace cspot_ng
             recv_cipher_.decrypt(header);
 
             // Extract command and size
-            uint16_t size = (header[1] << 8) | header[2];
+            uint16_t size;
+            memcpy(&size, header.data() + 1, sizeof(uint16_t));
+            size = ntohs(size);
             uint8_t command = header[0];
 
             ShannonPacket packet;
             packet.command = command;
 
-            packet.data = tcp_client_.receive(size);
+            if(size > 0)
+            {
+                packet.data = tcp_client_.receive(size);
 
-            // Decrypt the data
-            recv_cipher_.decrypt(packet.data);
+                // Decrypt the data
+                recv_cipher_.decrypt(packet.data);
+
+                if (packet.data.size() != size)
+                {
+                    // Handle error (could throw exception or return an empty packet)
+                    std::cerr << "Failed to receive complete data for command: " << static_cast<int>(command) << " expected size: " << size << " received size: " << packet.data.size() << std::endl;
+                    return ShannonPacket();
+                }
+            }
 
             // Receive the MAC
             ByteArray mac = tcp_client_.receive(4);
+
+            if (mac.size() < 4)
+            {
+                // Handle error (could throw exception or return an empty packet)
+                std::cerr << "Failed to receive MAC" << std::endl;
+                return ShannonPacket();
+            }
 
             // Generate MAC for verification
             ByteArray calculated_mac(4); // MAC_SIZE is 4 bytes
@@ -99,7 +118,7 @@ namespace cspot_ng
             // Verify MAC (in production code, should handle mismatch)
             if (mac != calculated_mac)
             {
-                std::cerr << "MAC mismatch" << std::endl;
+                std::cerr << "MAC mismatch on packet with command: " << static_cast<int>(command) <<  " and size: " << size << std::endl;
                 // Handle MAC mismatch (could throw exception or log)
                 return ShannonPacket();
             }
@@ -110,6 +129,7 @@ namespace cspot_ng
             recv_cipher_.nonce(nonce_vec);
 
             // Return the decrypted data
+            std::cout << "Received packet with command: " << static_cast<int>(command) << " and size: " << size << std::endl;
             return packet;
         }
 
@@ -159,6 +179,18 @@ namespace cspot_ng
                        ((value & 0xFF00) << 8) |
                        ((value & 0xFF0000) >> 8) |
                        ((value & 0xFF000000) >> 24);
+            }
+        }
+
+        uint16_t ntohs(uint16_t value)
+        {
+            uint16_t test = 0x0102;
+            if (*(uint8_t*)&test == 0x01) {
+                // Big-endian system
+                return value;
+            } else {
+                // Little-endian system
+                return ((value & 0xFF) << 8) | ((value & 0xFF00) >> 8);
             }
         }
 

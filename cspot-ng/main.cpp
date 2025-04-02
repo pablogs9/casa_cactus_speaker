@@ -33,7 +33,6 @@ int main()
         // Handle other tasks or sleep
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         std::cout << "Waiting for authentication..." << std::endl;
-
     }
 
     LinuxCrytoMbedTLS context_crypto;
@@ -54,19 +53,12 @@ int main()
     }
     else
     {
-        std::cout << "Authentication successful, token: ";
-        for (const auto& byte : token)
-        {
-            std::cout << std::hex << static_cast<int>(byte);
-        }
-        std::cout << std::dec << std::endl;
+        std::cout << "Authentication successful" << std::endl;
     }
 
     while (!zeroconf.is_closed())
     {
-        // Handle other tasks or sleep
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        std::cout << "Waiting for close..." << std::endl;
+        context.spin();
     }
 
     return 0;

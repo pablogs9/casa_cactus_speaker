@@ -112,7 +112,8 @@ namespace cspot_ng
     ByteArray LinuxTCPClient::receive(size_t max_size)
     {
         if (!m_connected) {
-            throw std::runtime_error("Not connected");
+            std::cerr << "Not connected" << std::endl;
+            return ByteArray();
         }
 
         bool max_size_set = max_size != 0;
@@ -121,29 +122,24 @@ namespace cspot_ng
         ByteArray buffer(max_size);
         ssize_t bytes_read = 0;
         unsigned int total_read = 0;
-        int retries = 0;
 
         while (total_read < max_size) {
             bytes_read = recv(m_socket, buffer.data() + total_read, max_size - total_read, 0);
 
             if (bytes_read <= 0) {
                 if (errno == EAGAIN || errno == ETIMEDOUT) {
-                    // Handle timeout
-                    if (retries++ > 4) {
-                        throw std::runtime_error("Receive timeout");
-                    }
-                    continue; // Retry
+                    return ByteArray(); // Timeout, return empty
                 } else if (errno == EINTR) {
+                    std::cout << "Receive interrupted, retrying..." << std::endl;
                     continue; // Interrupted, try again
                 } else if (bytes_read == 0) {
                     // Connection closed by peer
-                    throw std::runtime_error("Connection closed by peer");
+                    std::cout << "Connection closed by peer" << std::endl;
+                    return ByteArray(); // Return empty
                 } else {
-                    // Other errors
-                    if (retries++ > 4) {
-                        throw std::runtime_error(std::string("Receive error: ") + strerror(errno));
-                    }
-                    continue; // Retry a few times
+                    // // Other errors
+                    std::cout << "Receive error: " << strerror(errno) << std::endl;
+                    return ByteArray(); // Return empty
                 }
             }
 
@@ -157,6 +153,12 @@ namespace cspot_ng
 
         // Resize the buffer to match the actual amount of data read
         buffer.resize(total_read);
+
+        if(total_read > max_size) {
+            std::cout << "Warning: Read more bytes than expected. Expected: " << max_size << ", Actual: " << total_read << std::endl;
+        }
+
+        std::cout << "Read " << total_read << " bytes" << std::endl;
         return buffer;
     }
 

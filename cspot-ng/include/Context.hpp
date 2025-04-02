@@ -76,7 +76,15 @@ namespace cspot_ng
 
             if (response.command == AUTH_SUCCESSFUL_COMMAND)
             {
-                return response.data;
+                APWelcome welcome = APWelcome_init_default;
+
+                // Decode the response
+                ProtoBuffer<APWelcome>::decode(response.data, APWelcome_fields, welcome);
+
+                return ByteArray(
+                    welcome.reusable_auth_credentials.bytes,
+                    welcome.reusable_auth_credentials.bytes +
+                        welcome.reusable_auth_credentials.size);
             }
             else if (response.command == AUTH_DECLINED_COMMAND)
             {
@@ -92,6 +100,20 @@ namespace cspot_ng
                 // Handle other response commands if needed
                 std::cerr << "Unknown response command: " << static_cast<int>(response.command) << std::endl;
                 return {};
+            }
+        }
+
+        void spin()
+        {
+            if (shannon_tcp_client_.is_initialized())
+            {
+                auto received_data = shannon_tcp_client_.receive();
+
+                if (!received_data.data.empty())
+                {
+                    std::cout << "Received data: " << received_data.command << " - " << received_data.data.size() << " bytes" << std::endl;
+                }
+
             }
         }
 
