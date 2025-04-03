@@ -107,6 +107,8 @@ namespace cspot_ng
 
             total_sent += sent;
         }
+
+        std::cout << "Sent " << total_sent << " bytes" << std::endl;
     }
 
     ByteArray LinuxTCPClient::receive(size_t max_size)
@@ -128,7 +130,8 @@ namespace cspot_ng
 
             if (bytes_read <= 0) {
                 if (errno == EAGAIN || errno == ETIMEDOUT) {
-                    return ByteArray(); // Timeout, return empty
+                    buffer.resize(total_read); // Resize to actual read size
+                    return buffer; // Timeout, return what we have
                 } else if (errno == EINTR) {
                     std::cout << "Receive interrupted, retrying..." << std::endl;
                     continue; // Interrupted, try again
