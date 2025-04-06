@@ -107,8 +107,6 @@ namespace cspot_ng
 
             total_sent += sent;
         }
-
-        std::cout << "Sent " << total_sent << " bytes" << std::endl;
     }
 
     ByteArray LinuxTCPClient::receive(size_t max_size)
@@ -161,7 +159,6 @@ namespace cspot_ng
             std::cout << "Warning: Read more bytes than expected. Expected: " << max_size << ", Actual: " << total_read << std::endl;
         }
 
-        std::cout << "Read " << total_read << " bytes" << std::endl;
         return buffer;
     }
 

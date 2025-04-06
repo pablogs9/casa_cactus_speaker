@@ -111,7 +111,7 @@ namespace cspot_ng
 
                 if (!received_data.data.empty())
                 {
-                    std::cout << "Received data: " << received_data.command << " - " << received_data.data.size() << " bytes" << std::endl;
+                    std::cout << "Received data: " << (uint32_t)received_data.command << " - " << received_data.data.size() << " bytes" << std::endl;
                 }
 
             }

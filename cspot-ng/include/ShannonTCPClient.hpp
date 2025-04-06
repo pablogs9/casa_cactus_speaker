@@ -67,6 +67,12 @@ namespace cspot_ng
             // Receive the initial 3 bytes (command + size)
             ByteArray header = tcp_client_.receive(3);
 
+            if(header.size() == 0)
+            {
+                // Timeout
+                return ShannonPacket();
+            }
+
             if (header.size() < 3)
             {
                 // Handle error (could throw exception or return an empty packet)
@@ -129,7 +135,6 @@ namespace cspot_ng
             recv_cipher_.nonce(nonce_vec);
 
             // Return the decrypted data
-            std::cout << "Received packet with command: " << static_cast<int>(command) << " and size: " << size << std::endl;
             return packet;
         }
 
@@ -197,10 +202,10 @@ namespace cspot_ng
         ByteArray uint32_to_vector(uint32_t value)
         {
             ByteArray result(4);
-            result[0] = (value >> 24) & 0xFF;
-            result[1] = (value >> 16) & 0xFF;
-            result[2] = (value >> 8) & 0xFF;
-            result[3] = value & 0xFF;
+            result[3] = (value >> 24) & 0xFF;
+            result[2] = (value >> 16) & 0xFF;
+            result[1] = (value >> 8) & 0xFF;
+            result[0] = value & 0xFF;
             return result;
         }
     };
