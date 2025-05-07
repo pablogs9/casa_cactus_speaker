@@ -86,6 +86,7 @@
         "__tree": "cpp",
         "queue": "cpp",
         "stack": "cpp",
-        "__locale": "cpp"
+        "__locale": "cpp",
+        "filesystem": "cpp"
     }
 }

@@ -13,7 +13,7 @@ namespace cspot_ng
         ZeroConf(MDNSProvider & mdns, HTTPServer & server, Crypto & crypto)
             : mdns_(mdns)
             , server_(server)
-            , device_name_("CSpot player")
+            , device_name_("CasaCactusSpeaker")
             , login_blob_(device_name_, crypto)
         {
             // #############################

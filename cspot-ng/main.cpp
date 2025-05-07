@@ -7,7 +7,6 @@
 #include <ZeroConf.hpp>
 #include <Context.hpp>
 
-#include <linux/LinuxCrypto.hpp>
 #include <linux/LinuxCrytoMbedTLS.hpp>
 #include <linux/LinuxTCPClient.hpp>
 #include <linux/LinuxHTTPClient.hpp>
@@ -23,9 +22,9 @@ int main()
     LinuxTCPClient tcp_client;
     LinuxHTTPServer http_server;
     LinuxHTTPClient http_client;
-    LinuxCrytoMbedTLS crypto_zero_conf;
+    LinuxCrytoMbedTLS crypto;
 
-    ZeroConf zeroconf(mdns, http_server, crypto_zero_conf);
+    ZeroConf zeroconf(mdns, http_server, crypto);
 
     // Wait for authentication success
     while (!zeroconf.is_auth_success())
@@ -35,8 +34,7 @@ int main()
         std::cout << "Waiting for authentication..." << std::endl;
     }
 
-    LinuxCrytoMbedTLS context_crypto;
-    Context context(zeroconf.get_blob(), http_client, tcp_client, context_crypto);
+    Context context(zeroconf.get_blob(), http_client, tcp_client, crypto);
 
     if (!context.connect())
     {
