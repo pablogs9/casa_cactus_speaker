@@ -87,6 +87,11 @@
         "queue": "cpp",
         "stack": "cpp",
         "__locale": "cpp",
-        "filesystem": "cpp"
+        "filesystem": "cpp",
+        "__functional_base": "cpp",
+        "__tuple": "cpp",
+        "__bit_reference": "cpp",
+        "__memory": "cpp",
+        "locale": "cpp"
     }
 }

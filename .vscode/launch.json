@@ -5,10 +5,30 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "debug",
+            "name": "debugng",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/cspot-ng/build/cspot_ng",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "debug",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/cspot/build/targets/cli/cspotcli",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

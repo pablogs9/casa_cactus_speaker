@@ -3,6 +3,7 @@
 #include <interfaces/TCPClient.hpp>
 
 #include <ByteArray.hpp>
+#include <ByteUtils.hpp>
 #include <Shannon.h>
 
 namespace cspot_ng
@@ -39,6 +40,8 @@ namespace cspot_ng
 
         void send(const ShannonPacket& packet)
         {
+            std::cout << "Send packet, command: " << static_cast<int>(packet.command) << std::endl;
+
             // Create a copy of the data that we can encrypt
             ByteArray encrypted_data = packet.get_raw();
 
@@ -171,33 +174,6 @@ namespace cspot_ng
         uint32_t recv_nonce_;
 
         bool initialized_ = false;
-
-        uint32_t htonl(uint32_t value)
-        {
-            uint16_t test = 0x0102;
-            if (*(uint8_t*)&test == 0x01) {
-                // Big-endian system
-                return value;
-            } else {
-                // Little-endian system
-                return ((value & 0xFF) << 24) |
-                       ((value & 0xFF00) << 8) |
-                       ((value & 0xFF0000) >> 8) |
-                       ((value & 0xFF000000) >> 24);
-            }
-        }
-
-        uint16_t ntohs(uint16_t value)
-        {
-            uint16_t test = 0x0102;
-            if (*(uint8_t*)&test == 0x01) {
-                // Big-endian system
-                return value;
-            } else {
-                // Little-endian system
-                return ((value & 0xFF) << 8) | ((value & 0xFF00) >> 8);
-            }
-        }
 
         ByteArray uint32_to_vector(uint32_t value)
         {

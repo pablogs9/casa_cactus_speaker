@@ -27,7 +27,6 @@ namespace cspot_ng
             stream.bytes_written = 0;
             stream.errmsg = nullptr;
 
-
             if (!pb_encode(&stream, fields, &message))
             {
                 // Handle encoding error
@@ -44,6 +43,7 @@ namespace cspot_ng
             if (!pb_decode(&stream, fields, &message))
             {
                 // Handle decoding error
+                std::cout << " !!!!!!!!!!!!!!!!!! Decoding error:" << stream.errmsg << std::endl;
                 return {};
             }
 

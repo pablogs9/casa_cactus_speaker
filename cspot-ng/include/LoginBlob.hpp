@@ -72,6 +72,7 @@ namespace cspot_ng
                 const auto blob_string  = data.find("blob")->second;
                 const auto client_key_string = data.find("clientKey")->second;
                 const auto device_name = data.find("deviceName")->second;
+                device_name_ = device_name;
 
                 const auto client_key = crypto_.decode_base64(client_key_string);
                 const auto blob = crypto_.decode_base64(blob_string);
@@ -102,6 +103,11 @@ namespace cspot_ng
         const std::string & device_id() const
         {
             return device_id_;
+        }
+
+        const std::string & device_name() const
+        {
+            return device_name_;
         }
 
     private:
@@ -218,6 +224,7 @@ namespace cspot_ng
         std::string name_;
         std::string username_;
         std::string device_id_;
+        std::string device_name_;
 
         int auth_type_ = 0;
         ByteArray auth_data_;

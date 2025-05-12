@@ -93,6 +93,11 @@ file(GLOB NANO_PB_SOURCES
 # Add the source files to the executable
 target_sources(cspot_ng PRIVATE ${SOURCES} ${NANO_PB_SOURCES})
 
+# Add PB_ENABLE_MALLOC to the preprocessor definitions
+target_compile_definitions(cspot_ng PRIVATE
+    PB_ENABLE_MALLOC
+)
+
 # Add include directories
 include_directories(
     ${CMAKE_SOURCE_DIR}/

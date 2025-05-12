@@ -136,6 +136,7 @@ namespace cspot_ng
                 } else if (bytes_read == 0) {
                     // Connection closed by peer
                     std::cout << "Connection closed by peer" << std::endl;
+                    while(1){}
                     return ByteArray(); // Return empty
                 } else {
                     // // Other errors
