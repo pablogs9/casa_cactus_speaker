@@ -51,4 +51,10 @@ namespace cspot_ng
         }
     };
 
+    static void protobuffer_set_string(const std::string& string, char* dest)
+        {
+            string.copy(dest, string.size());
+            dest[string.size()] = '\0';
+        }
+
 };
