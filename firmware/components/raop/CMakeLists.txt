@@ -7,3 +7,6 @@ set_source_files_properties(raop.c
     PROPERTIES COMPILE_FLAGS
     -Wno-misleading-indentation
 )
+
+add_prebuilt_library(libalac 		libalac.a )
+target_link_libraries(${COMPONENT_LIB} INTERFACE libalac)

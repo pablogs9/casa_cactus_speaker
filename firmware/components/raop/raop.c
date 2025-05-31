@@ -547,6 +547,8 @@ static bool handle_rtsp(raop_ctx_t *ctx, int sock)
 		if ((p = strcasestr(buf, "timing_port")) != NULL) sscanf(p, "%*[^=]=%hu", &tport);
 		if ((p = strcasestr(buf, "control_port")) != NULL) sscanf(p, "%*[^=]=%hu", &cport);
 
+        printf("RTP init with buffer size %d\n", (int)size);
+
 		rtp = rtp_init(ctx->peer, ctx->latency,	ctx->rtsp.aeskey, ctx->rtsp.aesiv,
 					   ctx->rtsp.fmtp, cport, tport, buffer, size, ctx->cmd_cb, ctx->data_cb, ctx->cb_args);
 

@@ -22,26 +22,9 @@ public:
     {
     }
 
-    RingBuffer(
-        uint8_t* buffer,
-        size_t buffer_size,
-        std::string name = "")
-        : buffer_(buffer)
-        , size_(buffer_size)
-        , read_pos_(0)
-        , write_pos_(buffer_size)
-        , available_(buffer_size)
-        , name_("RingBuffer " + name)
-    {
-        delete_buffer_ = false; // Do not delete the buffer, it is managed externally
-    }
-
     ~RingBuffer()
     {
-        if(delete_buffer_)
-        {
-            delete[] buffer_;
-        }
+        delete[] buffer_;
     }
 
     std::span<uint8_t> max_write_slot()
@@ -141,11 +124,11 @@ private:
             // If we reach the end, consider the beginning of the buffer.
             if (write_pos_ == size_ - 1)
             {
-                return (read_pos_ == 0) ? 0 : read_pos_;
+                return (read_pos_ == 0) ? 0 : read_pos_ - 1;
             }
             else
             {
-                return std::min(size_ - write_pos_, (size_ - 1) - available_);
+                return std::min(size_ - write_pos_ - 1, (size_ - 1) - available_);
             }
         }
         else
@@ -194,6 +177,4 @@ private:
     size_t available_;          // Number of bytes available to read
 
     std::string name_;
-
-    bool delete_buffer_ = true; // Whether to delete the buffer on destruction
 };

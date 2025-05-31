@@ -87,13 +87,13 @@ public:
             uint32_t sample_rate,
             uint8_t channels)
     {
+        ESP_LOGI(TAG, "Changing sample rate from %lu to %lu, channels from %d to %d",
+                sample_rate_, sample_rate, channels_, channels);
+
         if (sample_rate == sample_rate_ && channels == channels_)
         {
             return;
         }
-
-        ESP_LOGI(TAG, "Changing sample rate from %lu to %lu, channels from %d to %d",
-                sample_rate_, sample_rate, channels_, channels);
 
         // Disable channel before reconfiguring
         ESP_ERROR_CHECK(i2s_channel_disable(handle_));
@@ -205,6 +205,17 @@ public:
         else
         {
             mute();
+        }
+    }
+
+    void direct_write(
+            const uint8_t* data,
+            size_t size)
+    {
+        size_t wrote = 0;
+        if (ESP_OK != i2s_channel_write(handle_, data, size, &wrote, portMAX_DELAY))
+        {
+            ESP_LOGE(TAG, "Error writing to I2S");
         }
     }
 

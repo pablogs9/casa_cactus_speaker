@@ -2,6 +2,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <stdarg.h>
 
 #include "esp_netif.h"
 #include "esp_log.h"
@@ -15,6 +16,19 @@
 #include "log_util.h"
 
 static struct raop_ctx_s *raop;
+static raop_cmd_vcb_t cmd_vcb = NULL;
+
+// Wrapper function to convert from raop_cmd_cb_t to raop_cmd_vcb_t
+static bool raop_cmd_wrapper(void *cb_args, raop_event_t event, ...) {
+    if (cmd_vcb == NULL) return false;
+
+    va_list args;
+    va_start(args, event);
+    bool result = cmd_vcb(cb_args, event, args);
+    va_end(args);
+
+    return result;
+}
 
 // static void raop_volume_up(bool pressed) {
 // 	if (!pressed) return;
@@ -65,68 +79,9 @@ static struct raop_ctx_s *raop;
 // }
 
 /****************************************************************************************
- * Command handler
- */
-static bool cmd_handler(void* cb_args, raop_event_t event, ...) {
-	// va_list args;
-
-	// va_start(args, event);
-
-	// // handle audio event and stop if forbidden
-	// if (!cmd_handler_chain(event, args)) {
-	// 	va_end(args);
-	// 	return false;
-	// }
-
-	// // now handle events for display
-	// switch(event) {
-	// case RAOP_SETUP:
-	// 	// displayer_control(DISPLAYER_ACTIVATE, "AIRPLAY", true);
-    //     // displayer_artwork(NULL);
-	// 	break;
-	// case RAOP_PLAY:
-	// 	// displayer_control(DISPLAYER_TIMER_RUN);
-	// 	break;
-	// case RAOP_FLUSH:
-	// 	// displayer_control(DISPLAYER_TIMER_PAUSE);
-	// 	break;
-    // case RAOP_STALLED:
-    //     raop_abort(raop);
-    //     // actrls_unset();
-    //     // displayer_control(DISPLAYER_SHUTDOWN);
-    //     break;
-	// case RAOP_STOP:
-	// 	// actrls_unset();
-	// 	// displayer_control(DISPLAYER_SUSPEND);
-	// 	break;
-	// case RAOP_METADATA: {
-	// 	// char *artist = va_arg(args, char*), *album = va_arg(args, char*), *title = va_arg(args, char*);
-	// 	// displayer_metadata(artist, album, title);
-	// 	break;
-	// }
-	// case RAOP_ARTWORK: {
-	// 	// uint8_t *data = va_arg(args, uint8_t*);
-	// 	// displayer_artwork(data);
-	// 	break;
-	// }
-	// case RAOP_PROGRESS: {
-	// 	// int elapsed = va_arg(args, int), duration = va_arg(args, int);
-	// 	// displayer_timer(DISPLAYER_ELAPSED, elapsed, duration);
-	// 	break;
-	// }
-	// default:
-	// 	break;
-	// }
-
-	// va_end(args);
-
-	return true;
-}
-
-/****************************************************************************************
  * Airplay sink initialization
  */
-void raop_sink_init(raop_cmd_vcb_t /* cmd_cb */, raop_data_cb_t data_cb, const char *sink_name, uint32_t ip, void *args)
+void raop_sink_init(raop_cmd_vcb_t cmd_cb, raop_data_cb_t data_cb, const char *sink_name, uint32_t ip, void *args)
 {
     psa_crypto_init();
 
@@ -134,6 +89,9 @@ void raop_sink_init(raop_cmd_vcb_t /* cmd_cb */, raop_data_cb_t data_cb, const c
 
     esp_wifi_get_mac(WIFI_IF_STA, mac);
 
+    // Store the va_list callback for use in the wrapper
+    cmd_vcb = cmd_cb;
+
 	LOG_INFO( "starting Airplay for ip %s with servicename %s", inet_ntoa(ip), sink_name);
-	raop = raop_create(ip, sink_name, mac, 0, cmd_handler, data_cb, args);
+	raop = raop_create(ip, sink_name, mac, 0, raop_cmd_wrapper, data_cb, args);
 }
