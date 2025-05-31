@@ -678,11 +678,14 @@ void cleanup_rtsp(raop_ctx_t *ctx, bool abort) {
 	if (ctx->rtp) {
 		rtp_end(ctx->rtp);
 		ctx->rtp = NULL;
-		if (abort) LOG_INFO("[%p]: RTP thread aborted", ctx);
+		if (abort)
+        {
+            LOG_INFO("[%p]: RTP thread aborted", ctx);
+        }
 	}
 
 	if (ctx->active_remote.running) {
-#ifdef WIN32
+#ifdef WIN3
 		pthread_join(ctx->active_remote.thread, NULL);
 		close_mDNS(ctx->active_remote.handle);
 #else

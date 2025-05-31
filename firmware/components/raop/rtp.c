@@ -46,8 +46,7 @@
 #include "log_util.h"
 #include "util.h"
 
-#include <decoder/impl/esp_alac_dec.h>
-// #include "alac_wrapper.h"
+#include "alac_wrapper.h"
 
 #ifdef WIN32
 #include <openssl/aes.h>
@@ -171,85 +170,10 @@ static void 	rtp_thread_func(void *arg);
 /*---------------------------------------------------------------------------*/
 static struct alac_codec_s * alac_init(int* fmtp, size_t fmtp_len)
 {
-    // struct alac_codec_s *alac;
-	// unsigned sample_rate, block_size;
-	// unsigned char sample_size, channels;
-	// struct {
-	// 	uint32_t	frameLength;
-	// 	uint8_t		compatibleVersion;
-	// 	uint8_t		bitDepth;
-	// 	uint8_t		pb;
-	// 	uint8_t		mb;
-	// 	uint8_t		kb;
-	// 	uint8_t		numChannels;
-	// 	uint16_t	maxRun;
-	// 	uint32_t	maxFrameBytes;
-	// 	uint32_t	avgBitRate;
-	// 	uint32_t	sampleRate;
-	// } config;
-
-	// config.frameLength = htonl(fmtp[1]);
-	// config.compatibleVersion = fmtp[2];
-	// config.bitDepth = fmtp[3];
-	// config.pb = fmtp[4];
-	// config.mb = fmtp[5];
-	// config.kb = fmtp[6];
-	// config.numChannels = fmtp[7];
-	// config.maxRun = htons(fmtp[8]);
-	// config.maxFrameBytes = htonl(fmtp[9]);
-	// config.avgBitRate = htonl(fmtp[10]);
-	// config.sampleRate = htonl(fmtp[11]);
-
-	// alac = alac_create_decoder(sizeof(config), (unsigned char*) &config, &sample_size, &sample_rate, &channels, &block_size);
-	// if (!alac) {
-	// 	ESP_LOGE("RTP", "cannot create alac codec");
-	// 	return NULL;
-	// }
-
-	// return alac;
-    static bool alac_init_done = false;
-
-    if(!alac_init_done) {
-
-        if (esp_alac_dec_register() != ESP_AUDIO_ERR_OK)
-        {
-            ESP_LOGE("RAOP", "Failed to register ALAC decoder with error");
-
-            return NULL;
-        }
-        alac_init_done = true;
-    }
-
-    // Given fmtp:
-    //  fmtp[0] = 1; // ALAC version
-    //	fmtp[1] is frame length in samples
-    //	fmtp[2] is compatible version
-    //	fmtp[3] is bit depth
-    //	fmtp[4] is pb (predictor bits)
-    //	fmtp[5] is mb (maximum bits)
-    //	fmtp[6] is kb (maximum sample size)
-    //	fmtp[7] is number of channels
-    //	fmtp[8] is max run (in samples)
-    //	fmtp[9] is max frame bytes
-    //	fmtp[10] is average bit rate
-    //	fmtp[11] is sample rate
-
-    // Print all the info:
-    ESP_LOGI("RAOP", "Initializing ALAC decoder with fmtp:");
-    printf("ALAC Version: %d\n", fmtp[0]);
-    printf("Frame Length: %d samples\n", fmtp[1]);
-    printf("Compatible Version: %d\n", fmtp[2]);
-    printf("Bit Depth: %d bits\n", fmtp[3]);
-    printf("Predictor Bits (pb): %d\n", fmtp[4]);
-    printf("Maximum Bits (mb): %d\n", fmtp[5]);
-    printf("Maximum Sample Size (kb): %d\n", fmtp[6]);
-    printf("Number of Channels: %d\n", fmtp[7]);
-    printf("Max Run (in samples): %d\n", fmtp[8]);
-    printf("Max Frame Bytes: %d\n", fmtp[9]);
-    printf("Average Bit Rate: %d bps\n", fmtp[10]);
-    printf("Sample Rate: %d Hz\n", fmtp[11]);
-
-    struct {
+    struct alac_codec_s *alac;
+	unsigned sample_rate, block_size;
+	unsigned char sample_size, channels;
+	struct {
 		uint32_t	frameLength;
 		uint8_t		compatibleVersion;
 		uint8_t		bitDepth;
@@ -275,68 +199,14 @@ static struct alac_codec_s * alac_init(int* fmtp, size_t fmtp_len)
 	config.avgBitRate = htonl(fmtp[10]);
 	config.sampleRate = htonl(fmtp[11]);
 
-    esp_alac_dec_cfg_t magic_cookie = {
-        .codec_spec_info = (uint8_t*) &config,
-        .spec_info_len = sizeof(config)
-    };
+	alac = alac_create_decoder(sizeof(config), (unsigned char*) &config, &sample_size, &sample_rate, &channels, &block_size);
+	if (!alac) {
+		ESP_LOGE("RTP", "cannot create alac codec");
+		return NULL;
+	}
 
-    void *handle = NULL;
-    esp_audio_err_t ret = esp_alac_dec_open(&magic_cookie, sizeof(magic_cookie), &handle);
-
-    if (ret != ESP_AUDIO_ERR_OK) {
-        ESP_LOGE("RAOP", "Failed to open ALAC decoder with error %d", ret);
-        return NULL;
-    }
-
-    ESP_LOGI("RAOP", "ALAC decoder initialized successfully");
-    return (struct alac_codec_s *) handle;  // return the decoder handle
+	return alac;
 }
-
-static void alac_delete_decoder(struct alac_codec_s * alac_codec)
-{
-    // if (alac_codec) {
-    //     esp_audio_err_t ret = esp_alac_dec_close((void*) alac_codec);
-    //     if (ret != ESP_AUDIO_ERR_OK) {
-    //         ESP_LOGE("RAOP", "Failed to close ALAC decoder with error %d", ret);
-    //     } else {
-    //         ESP_LOGI("RAOP", "ALAC decoder closed successfully");
-    //     }
-    // }
-}
-
-static void alac_to_pcm(struct alac_codec_s * alac_codec, unsigned char *src, unsigned char *dest, int channels, unsigned int *outsize)
-{
-
-    // esp_audio_err_t esp_alac_dec_decode(void *dec_handle, esp_audio_dec_in_raw_t *raw, esp_audio_dec_out_frame_t *frame,
-    //                                   esp_audio_dec_info_t *dec_info);
-
-    // Assuming alac_codec is a valid decoder handle and src is the ALAC encoded data
-    esp_audio_dec_in_raw_t input_frame = {
-        .buffer = src,
-        .len = MAX_PACKET, // size of the ALAC encoded data
-        .consumed = 0      // number of bytes consumed
-    };
-
-    esp_audio_dec_out_frame_t output_frame = {
-        .buffer = dest,    // buffer to hold the decoded PCM data
-        .len = MAX_PACKET * 4, // assuming 16-bit samples, adjust as necessary
-        .needed_size = 0,  // size needed for the output buffer
-        .decoded_size = 0  // size of the decoded data
-    };
-
-    esp_audio_dec_info_t dec_info = {0}; // Optional, can be NULL if not needed
-
-    esp_audio_err_t ret = esp_alac_dec_decode((void*) alac_codec, &input_frame, &output_frame, &dec_info);
-
-    if (ret != ESP_AUDIO_ERR_OK) {
-        ESP_LOGE("RAOP", "Failed to decode ALAC frame with error %d", ret);
-        *outsize = 0; // indicate failure
-        return;
-    }
-    ESP_LOGD("RAOP", "Decoded ALAC frame size: %lu", output_frame.decoded_size);
-    *outsize = output_frame.decoded_size;
-}
-
 
 /*---------------------------------------------------------------------------*/
 rtp_resp_t rtp_init(struct in_addr host, int latency, char *aeskey, char *aesiv, char *fmtpstr,
@@ -387,6 +257,12 @@ rtp_resp_t rtp_init(struct in_addr host, int latency, char *aeskey, char *aesiv,
 
 	memset(fmtp, 0, sizeof(fmtp));
 	while ((arg = strsep(&fmtpstr, " \t")) != NULL) fmtp[i++] = atoi(arg);
+
+    printf("RTP fmtp: ");
+    for (int j = 0; j < i; j++) {
+        printf("%d ", fmtp[j]);
+    }
+    printf("\n");
 
 	ctx->frame_size = fmtp[1];
 	ctx->frame_duration = (ctx->frame_size * 1000) / RAOP_SAMPLE_RATE;
@@ -643,7 +519,10 @@ static void buffer_put_packet(rtp_t *ctx, seq_t seqno, unsigned rtptime, bool fi
 		LOG_DEBUG("[%p]: packet recovered seqno:%hu rtptime:%u (W:%hu R:%hu)", ctx, seqno, rtptime, ctx->ab_write, ctx->ab_read);
 	} else {
         // too late
-		if (abuf->missed) LOG_INFO("[%p]: packet too late seqno:%hu rtptime:%u (W:%hu R:%hu)", ctx, seqno, rtptime, ctx->ab_write, ctx->ab_read);
+		if (abuf->missed)
+        {
+            LOG_INFO("[%p]: packet too late seqno:%hu rtptime:%u (W:%hu R:%hu)", ctx, seqno, rtptime, ctx->ab_write, ctx->ab_read);
+        }
         abuf = NULL;
 	}
 
