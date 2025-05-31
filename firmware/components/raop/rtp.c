@@ -46,6 +46,8 @@
 #include "log_util.h"
 #include "util.h"
 
+#include <decoder/impl/esp_alac_dec.h>
+
 #ifdef WIN32
 #include <openssl/aes.h>
 #include "alac_wrapper.h"
@@ -57,15 +59,14 @@
 #include <mbedtls/aes.h>
 #endif
 
+#define RTP_CORE_AFFINITY  0
+
 #define NTP2MS(ntp) ((((ntp) >> 10) * 1000L) >> 22)
 #define MS2NTP(ms) (((((u64_t) (ms)) << 22) / 1000) << 10)
 #define NTP2TS(ntp, rate) ((((ntp) >> 16) * (rate)) >> 16)
 #define TS2NTP(ts, rate)  (((((u64_t) (ts)) << 16) / (rate)) << 16)
 #define MS2TS(ms, rate) ((((u64_t) (ms)) * (rate)) / 1000)
 #define TS2MS(ts, rate) NTP2MS(TS2NTP(ts,rate))
-
-extern log_level 	raop_loglevel;
-static log_level 	*loglevel = &raop_loglevel;
 
 //#define __RTP_STORE
 
@@ -146,6 +147,7 @@ typedef struct rtp_s {
     int stalled;
 	raop_data_cb_t data_cb;
 	raop_cmd_cb_t cmd_cb;
+    void *cb_args;
 
     int* alac_codec;
 } rtp_t;
@@ -166,16 +168,144 @@ static void 	rtp_thread_func(void *arg);
 #endif
 
 /*---------------------------------------------------------------------------*/
-static int* alac_init(int* fmtp) {
+static int* alac_init(int* fmtp, size_t fmtp_len)
+{
+    static bool alac_init_done = false;
 
-	return NULL;
+    if(!alac_init_done) {
+
+        if (esp_alac_dec_register() != ESP_AUDIO_ERR_OK)
+        {
+            ESP_LOGE("RAOP", "Failed to register ALAC decoder with error");
+
+            return NULL;
+        }
+        alac_init_done = true;
+    }
+
+    // Given fmtp:
+    //  fmtp[0] = 1; // ALAC version
+    //	fmtp[1] is frame length in samples
+    //	fmtp[2] is compatible version
+    //	fmtp[3] is bit depth
+    //	fmtp[4] is pb (predictor bits)
+    //	fmtp[5] is mb (maximum bits)
+    //	fmtp[6] is kb (maximum sample size)
+    //	fmtp[7] is number of channels
+    //	fmtp[8] is max run (in samples)
+    //	fmtp[9] is max frame bytes
+    //	fmtp[10] is average bit rate
+    //	fmtp[11] is sample rate
+
+    // Print all the info:
+    ESP_LOGI("RAOP", "Initializing ALAC decoder with fmtp:");
+    printf("ALAC Version: %d\n", fmtp[0]);
+    printf("Frame Length: %d samples\n", fmtp[1]);
+    printf("Compatible Version: %d\n", fmtp[2]);
+    printf("Bit Depth: %d bits\n", fmtp[3]);
+    printf("Predictor Bits (pb): %d\n", fmtp[4]);
+    printf("Maximum Bits (mb): %d\n", fmtp[5]);
+    printf("Maximum Sample Size (kb): %d\n", fmtp[6]);
+    printf("Number of Channels: %d\n", fmtp[7]);
+    printf("Max Run (in samples): %d\n", fmtp[8]);
+    printf("Max Frame Bytes: %d\n", fmtp[9]);
+    printf("Average Bit Rate: %d bps\n", fmtp[10]);
+    printf("Sample Rate: %d Hz\n", fmtp[11]);
+
+    struct {
+		uint32_t	frameLength;
+		uint8_t		compatibleVersion;
+		uint8_t		bitDepth;
+		uint8_t		pb;
+		uint8_t		mb;
+		uint8_t		kb;
+		uint8_t		numChannels;
+		uint16_t	maxRun;
+		uint32_t	maxFrameBytes;
+		uint32_t	avgBitRate;
+		uint32_t	sampleRate;
+	} config;
+
+	config.frameLength = htonl(fmtp[1]);
+	config.compatibleVersion = fmtp[2];
+	config.bitDepth = fmtp[3];
+	config.pb = fmtp[4];
+	config.mb = fmtp[5];
+	config.kb = fmtp[6];
+	config.numChannels = fmtp[7];
+	config.maxRun = htons(fmtp[8]);
+	config.maxFrameBytes = htonl(fmtp[9]);
+	config.avgBitRate = htonl(fmtp[10]);
+	config.sampleRate = htonl(fmtp[11]);
+
+    esp_alac_dec_cfg_t magic_cookie = {
+        .codec_spec_info = (uint8_t*) &config,
+        .spec_info_len = sizeof(config)
+    };
+
+    void *handle = NULL;
+    esp_audio_err_t ret = esp_alac_dec_open(&magic_cookie, sizeof(magic_cookie), &handle);
+
+    if (ret != ESP_AUDIO_ERR_OK) {
+        ESP_LOGE("RAOP", "Failed to open ALAC decoder with error %d", ret);
+        return NULL;
+    }
+
+    ESP_LOGI("RAOP", "ALAC decoder initialized successfully");
+    return (int*) handle;  // return the decoder handle
 }
+
+static void alac_delete_decoder(int* alac_codec)
+{
+    if (alac_codec) {
+        esp_audio_err_t ret = esp_alac_dec_close((void*) alac_codec);
+        if (ret != ESP_AUDIO_ERR_OK) {
+            ESP_LOGE("RAOP", "Failed to close ALAC decoder with error %d", ret);
+        } else {
+            ESP_LOGI("RAOP", "ALAC decoder closed successfully");
+        }
+    }
+}
+
+static void alac_to_pcm(int* alac_codec, unsigned char *src, unsigned char *dest, int channels, unsigned int *outsize)
+{
+
+    // esp_audio_err_t esp_alac_dec_decode(void *dec_handle, esp_audio_dec_in_raw_t *raw, esp_audio_dec_out_frame_t *frame,
+    //                                   esp_audio_dec_info_t *dec_info);
+
+    // Assuming alac_codec is a valid decoder handle and src is the ALAC encoded data
+    esp_audio_dec_in_raw_t input_frame = {
+        .buffer = src,
+        .len = MAX_PACKET, // size of the ALAC encoded data
+        .consumed = 0      // number of bytes consumed
+    };
+
+    esp_audio_dec_out_frame_t output_frame = {
+        .buffer = dest,    // buffer to hold the decoded PCM data
+        .len = MAX_PACKET * 4, // assuming 16-bit samples, adjust as necessary
+        .needed_size = 0,  // size needed for the output buffer
+        .decoded_size = 0  // size of the decoded data
+    };
+
+    esp_audio_dec_info_t dec_info = {0}; // Optional, can be NULL if not needed
+
+    esp_audio_err_t ret = esp_alac_dec_decode((void*) alac_codec, &input_frame, &output_frame, &dec_info);
+
+    if (ret != ESP_AUDIO_ERR_OK) {
+        ESP_LOGE("RAOP", "Failed to decode ALAC frame with error %d", ret);
+        *outsize = 0; // indicate failure
+        return;
+    }
+    ESP_LOGD("RAOP", "Decoded ALAC frame size: %lu", output_frame.decoded_size);
+    *outsize = output_frame.decoded_size;
+}
+
 
 /*---------------------------------------------------------------------------*/
 rtp_resp_t rtp_init(struct in_addr host, int latency, char *aeskey, char *aesiv, char *fmtpstr,
 								short unsigned pCtrlPort, short unsigned pTimingPort,
 								uint8_t *buffer, size_t size,
-								raop_cmd_cb_t cmd_cb, raop_data_cb_t data_cb)
+								raop_cmd_cb_t cmd_cb, raop_data_cb_t data_cb, void *cb_args)
 {
 	int i = 0;
 	char *arg;
@@ -190,6 +320,7 @@ rtp_resp_t rtp_init(struct in_addr host, int latency, char *aeskey, char *aesiv,
 	ctx->decrypt = false;
 	ctx->cmd_cb = cmd_cb;
 	ctx->data_cb = data_cb;
+    ctx->cb_args = cb_args;
 	ctx->rtp_host.sin_family = AF_INET;
 	ctx->rtp_host.sin_addr.s_addr = INADDR_ANY;
 	pthread_mutex_init(&ctx->ab_mutex, 0);
@@ -220,11 +351,17 @@ rtp_resp_t rtp_init(struct in_addr host, int latency, char *aeskey, char *aesiv,
 	memset(fmtp, 0, sizeof(fmtp));
 	while ((arg = strsep(&fmtpstr, " \t")) != NULL) fmtp[i++] = atoi(arg);
 
+    printf("RTP fmtp: ");
+    for (int j = 0; j < i; j++) {
+        printf("%d ", fmtp[j]);
+    }
+    printf("\n");
+
 	ctx->frame_size = fmtp[1];
 	ctx->frame_duration = (ctx->frame_size * 1000) / RAOP_SAMPLE_RATE;
 
 	// alac decoder
-	ctx->alac_codec = alac_init(fmtp);
+	ctx->alac_codec = alac_init(fmtp, sizeof(fmtp) / sizeof(int));
 	rc &= ctx->alac_codec != NULL;
 
 	buffer_alloc(ctx->audio_buffer, ctx->frame_size*4, buffer, size);
@@ -247,8 +384,8 @@ rtp_resp_t rtp_init(struct in_addr host, int latency, char *aeskey, char *aesiv,
 #else
 	ctx->xTaskBuffer = (StaticTask_t*) heap_caps_malloc(sizeof(StaticTask_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 	ctx->thread = xTaskCreateStaticPinnedToCore( (TaskFunction_t) rtp_thread_func, "RTP_thread", RTP_STACK_SIZE, ctx,
-									 CONFIG_ESP32_PTHREAD_TASK_PRIO_DEFAULT + 1, ctx->xStack, ctx->xTaskBuffer,
-									 CONFIG_PTHREAD_TASK_CORE_DEFAULT );
+									 5, ctx->xStack, ctx->xTaskBuffer,
+									 RTP_CORE_AFFINITY );
 #endif
 
 	// cleanup everything if we failed
@@ -285,7 +422,7 @@ void rtp_end(rtp_t *ctx)
 
 	for (i = 0; i < 3; i++) closesocket(ctx->rtp_sockets[i].sock);
 
-	// if (ctx->alac_codec) alac_delete_decoder(ctx->alac_codec);
+	if (ctx->alac_codec) alac_delete_decoder(ctx->alac_codec);
 	if (ctx->decrypt_buf) free(ctx->decrypt_buf);
 
 	pthread_mutex_destroy(&ctx->ab_mutex);
@@ -343,7 +480,7 @@ static void buffer_alloc(abuf_t *audio_buffer, int size, uint8_t *buf, size_t bu
         buf_size -= size;
     }
 
-    LOG_INFO("allocated %d buffers (min=%d) from buffer of %zu bytes", buffer_frames, BUFFER_FRAMES_MIN, buf_size + buffer_frames * size);
+    // LOG_INFO("allocated %lu buffers (min=%d) from buffer of %zu bytes", buffer_frames, BUFFER_FRAMES_MIN, buf_size + buffer_frames * size);
 
     for(; buffer_frames < BUFFER_FRAMES_MIN; buffer_frames++) {
 		audio_buffer[buffer_frames].data = malloc(size);
@@ -383,15 +520,11 @@ static void alac_decode(rtp_t *ctx, s16_t *dest, char *buf, int len, u16_t *outs
 	if (ctx->decrypt) {
 		aeslen = len & ~0xf;
 		memcpy(iv, ctx->aesiv, sizeof(iv));
-#ifdef WIN32
-		AES_cbc_encrypt((unsigned char*)buf, ctx->decrypt_buf, aeslen, &ctx->aes, iv, AES_DECRYPT);
-#else
 		mbedtls_aes_crypt_cbc(&ctx->aes, MBEDTLS_AES_DECRYPT, aeslen, iv, (unsigned char*) buf, ctx->decrypt_buf);
-#endif
 		memcpy(ctx->decrypt_buf+aeslen, buf+aeslen, len-aeslen);
-		// alac_to_pcm(ctx->alac_codec, (unsigned char*) ctx->decrypt_buf, (unsigned char*) dest, 2, (unsigned int*) outsize);
+		alac_to_pcm(ctx->alac_codec, (unsigned char*) ctx->decrypt_buf, (unsigned char*) dest, 2, (unsigned int*) outsize);
 	} else {
-		// alac_to_pcm(ctx->alac_codec, (unsigned char*) buf, (unsigned char*) dest, 2, (unsigned int*) outsize);
+		alac_to_pcm(ctx->alac_codec, (unsigned char*) buf, (unsigned char*) dest, 2, (unsigned int*) outsize);
 	}
 
 	*outsize *= 4;
@@ -426,7 +559,7 @@ static void buffer_put_packet(rtp_t *ctx, seq_t seqno, unsigned rtptime, bool fi
 			ctx->state = RTP_PLAY;
 			ctx->first_seqno = -1;
             u32_t playtime = ctx->synchro.time + ((rtptime - ctx->synchro.rtp) * 10) / (RAOP_SAMPLE_RATE / 100);
-            ctx->cmd_cb(RAOP_PLAY, playtime);
+            ctx->cmd_cb(ctx->cb_args, RAOP_PLAY, playtime);
 		} else {
             ctx->state = RTP_STREAM;
 			LOG_INFO("[%p]: 1st accepted packet:%hu, waiting for FLUSH", ctx, seqno);
@@ -442,7 +575,7 @@ static void buffer_put_packet(rtp_t *ctx, seq_t seqno, unsigned rtptime, bool fi
 		ctx->state = RTP_PLAY;
 		ctx->first_seqno = -1;
         u32_t playtime = ctx->synchro.time + ((rtptime - ctx->synchro.rtp) * 10) / (RAOP_SAMPLE_RATE / 100);
-		ctx->cmd_cb(RAOP_PLAY, playtime);
+		ctx->cmd_cb(ctx->cb_args, RAOP_PLAY, playtime);
 	}
 
     abuf = ctx->audio_buffer + BUFIDX(seqno);
@@ -484,7 +617,7 @@ static void buffer_put_packet(rtp_t *ctx, seq_t seqno, unsigned rtptime, bool fi
 	}
 
 	if (ctx->in_frames++ > 1000) {
-		LOG_INFO("[%p]: fill [level:%hu rec:%u] [W:%hu R:%hu]", ctx, ctx->ab_write - ctx->ab_read, ctx->resent_rec, ctx->ab_write, ctx->ab_read);
+		// LOG_INFO("[%p]: fill [level:%hu rec:%u] [W:%hu R:%hu]", ctx, ctx->ab_write - ctx->ab_read, ctx->resent_rec, ctx->ab_write, ctx->ab_read);
 		ctx->in_frames = 0;
 	}
 
@@ -524,21 +657,21 @@ static void buffer_push_packet(rtp_t *ctx) {
 		playtime = ctx->synchro.time + ((curframe->rtptime - ctx->synchro.rtp) * 10) / (RAOP_SAMPLE_RATE / 100);
 
 		if (now > playtime) {
-			LOG_DEBUG("[%p]: discarded frame now:%u missed by:%d (W:%hu R:%hu)", ctx, now, now - playtime, ctx->ab_write, ctx->ab_read);
+			LOG_DEBUG("[%p]: discarded frame now:%lu missed by:%lu (W:%hu R:%hu)", ctx, now, now - playtime, ctx->ab_write, ctx->ab_read);
 			ctx->discarded++;
 			curframe->ready = 0;
 		} else if (playtime - now <= hold) {
 			if (curframe->ready) {
-				ctx->data_cb((const u8_t*) curframe->data, curframe->len, playtime);
+				ctx->data_cb(ctx->cb_args, (const u8_t*) curframe->data, curframe->len, playtime);
 				curframe->ready = 0;
 			} else {
 				LOG_DEBUG("[%p]: created zero frame (W:%hu R:%hu)", ctx, ctx->ab_write, ctx->ab_read);
-				ctx->data_cb(silence_frame, ctx->frame_size * 4, playtime);
+				ctx->data_cb(ctx->cb_args, silence_frame, ctx->frame_size * 4, playtime);
 				ctx->silent_frames++;
                 curframe->missed = 1;
 			}
 		} else if (curframe->ready) {
-			ctx->data_cb((const u8_t*) curframe->data, curframe->len, playtime);
+			ctx->data_cb(ctx->cb_args, (const u8_t*) curframe->data, curframe->len, playtime);
 			curframe->ready = 0;
 		} else {
 			break;
@@ -550,13 +683,13 @@ static void buffer_push_packet(rtp_t *ctx) {
 	} while (seq_order(ctx->ab_read, ctx->ab_write));
 
 	if (ctx->out_frames > 1000) {
-		LOG_INFO("[%p]: drain [level:%hd head:%d ms] [W:%hu R:%hu] [req:%u sil:%u dis:%u]",
-				ctx, ctx->ab_write - ctx->ab_read, playtime - now, ctx->ab_write, ctx->ab_read,
-				ctx->resent_req, ctx->silent_frames, ctx->discarded);
+		// LOG_INFO("[%p]: drain [level:%hd head:%d ms] [W:%lu R:%lu] [req:%lu sil:%lu dis:%lu]",
+		// 		ctx, ctx->ab_write - ctx->ab_read, playtime - now, ctx->ab_write, ctx->ab_read,
+		// 		ctx->resent_req, ctx->silent_frames, ctx->discarded);
 		ctx->out_frames = 0;
 	}
 
-	LOG_SDEBUG("playtime %u %d [W:%hu R:%hu] %d", playtime, playtime - now, ctx->ab_write, ctx->ab_read, curframe->ready);
+	LOG_SDEBUG("playtime %lu %lu [W:%hu R:%hu] %d", playtime, playtime - now, ctx->ab_write, ctx->ab_read, curframe->ready);
 
     // try to request resend missing packet in order, explore up to 32 frames
     for (int step = max((ctx->ab_write - ctx->ab_read + 1) / 32, 1),
@@ -609,7 +742,7 @@ static void rtp_thread_func(void *arg) {
 		for (i = 0; i < 3; i++)	{ FD_SET(ctx->rtp_sockets[i].sock, &fds); }
 
 		if (select(sock + 1, &fds, NULL, NULL, &timeout) <= 0) {
-            if (ctx->stalled++ == 30*10) ctx->cmd_cb(RAOP_STALLED);
+            if (ctx->stalled++ == 30*10) ctx->cmd_cb(ctx->cb_args, RAOP_STALLED);
             continue;
         }
 
@@ -684,7 +817,7 @@ static void rtp_thread_func(void *arg) {
 
 				// something is wrong, we should not have such gap
 				if (remote_gap > 10000) {
-					LOG_WARN("discarding remote timing information %u", remote_gap);
+					LOG_WARN("discarding remote timing information %lu", remote_gap);
 					break;
 				}
 
@@ -708,10 +841,10 @@ static void rtp_thread_func(void *arg) {
 
 				pthread_mutex_unlock(&ctx->ab_mutex);
 
-				LOG_DEBUG("[%p]: sync packet latency:%d rtp_latency:%u rtp:%u remote ntp:%llx, local time:%u local rtp:%u (now:%u)",
+				LOG_DEBUG("[%p]: sync packet latency:%d rtp_latency:%lu rtp:%lu remote ntp:%llx, local time:%lu local rtp:%lu (now:%lu)",
 						  ctx, ctx->latency, rtp_now_latency, rtp_now, remote, ctx->synchro.time, ctx->synchro.rtp, gettime_ms());
 
-				if ((ctx->synchro.status & RTP_SYNC) && (ctx->synchro.status & NTP_SYNC)) ctx->cmd_cb(RAOP_TIMING);
+				if ((ctx->synchro.status & RTP_SYNC) && (ctx->synchro.status & NTP_SYNC)) ctx->cmd_cb(ctx->cb_args, RAOP_TIMING);
 
 				break;
 			}
@@ -726,7 +859,7 @@ static void rtp_thread_func(void *arg) {
 				if (roundtrip > 100) {
 					// ask for another one only if we are not synced already
 					if (!(ctx->synchro.status & NTP_SYNC)) rtp_request_timing(ctx);
-					LOG_WARN("[%p]: discarding NTP roundtrip of %u ms", ctx, roundtrip);
+					LOG_WARN("[%p]: discarding NTP roundtrip of %lu ms", ctx, roundtrip);
 					break;
 				}
 
@@ -743,7 +876,7 @@ static void rtp_thread_func(void *arg) {
 				// now we are synced on NTP (mutex not needed)
 				ctx->synchro.status |= NTP_SYNC;
 
-				LOG_DEBUG("[%p]: Timing references local:%llu, remote:%llx (delta:%lld, sum:%lld, adjust:%lld, gaps:%d)",
+				LOG_DEBUG("[%p]: Timing references local:%llu, remote:%llx",
 						  ctx, ctx->timing.local, ctx->timing.remote);
 
 				break;
@@ -774,7 +907,7 @@ static bool rtp_request_timing(rtp_t *ctx) {
 	int i;
 	struct sockaddr_in host;
 
-	LOG_DEBUG("[%p]: timing request now:%u (port: %hu)", ctx, now, ctx->rtp_sockets[TIMING].rport);
+	LOG_DEBUG("[%p]: timing request now:%lu (port: %hu)", ctx, now, ctx->rtp_sockets[TIMING].rport);
 
 	req[0] = 0x80;
 	req[1] = 0x52|0x80;

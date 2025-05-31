@@ -24,17 +24,12 @@
 
 #include "platform.h"
 
-typedef enum { lERROR = 0, lWARN, lINFO, lDEBUG, lSDEBUG } log_level;
+#include "esp_log.h"
 
-const char *logtime(void);
-void logprint(const char *fmt, ...);
-log_level debug2level(char *level);
-char *level2debug(log_level level);
-
-#define LOG_ERROR(fmt, ...) logprint("%s %s:%d " fmt "\n", logtime(), __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOG_WARN(fmt, ...)  if (*loglevel >= lWARN)  logprint("%s %s:%d " fmt "\n", logtime(), __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOG_INFO(fmt, ...)  if (*loglevel >= lINFO)  logprint("%s %s:%d " fmt "\n", logtime(), __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOG_DEBUG(fmt, ...) if (*loglevel >= lDEBUG) logprint("%s %s:%d " fmt "\n", logtime(), __FUNCTION__, __LINE__, ##__VA_ARGS__)
-#define LOG_SDEBUG(fmt, ...) if (*loglevel >= lSDEBUG) logprint("%s %s:%d " fmt "\n", logtime(), __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define LOG_ERROR(fmt, ...)     ESP_LOGE("RAOP", fmt, ##__VA_ARGS__)
+#define LOG_WARN(fmt, ...)      ESP_LOGW("RAOP", fmt, ##__VA_ARGS__)
+#define LOG_INFO(fmt, ...)      ESP_LOGI("RAOP", fmt, ##__VA_ARGS__)
+#define LOG_DEBUG(fmt, ...)     ESP_LOGD("RAOP", fmt, ##__VA_ARGS__)
+#define LOG_SDEBUG(fmt, ...)    ESP_LOGD("RAOP", fmt, ##__VA_ARGS__)
 
 #endif

@@ -213,11 +213,18 @@ public:
     {
         auto read_slot = data.max_read_slot();
 
-        // If not multiple of 4 -> error
-        if (read_slot.size() % 4 != 0)
+        // Trim to multiple of 4 bytes (stereo 16-bit samples)
+        if (read_slot.size() >= 4 && read_slot.size() % 4 != 0)
         {
-            ESP_LOGE(TAG, "Data size not multiple of 4");
-
+            size_t trimmed_size = read_slot.size() - (read_slot.size() % 4);
+            ESP_LOGD(TAG, "Trimming data from %zu to %zu bytes to align to 4-byte boundary",
+                     read_slot.size(), trimmed_size);
+            read_slot = std::span<uint8_t>(read_slot.data(), trimmed_size);
+        }
+        else if (read_slot.size() < 4)
+        {
+            ESP_LOGW(TAG, "Not enough data to write from the beggining, size: %zu bytes", read_slot.size());
+            data.commit_read(read_slot.size());
             return;
         }
 
@@ -227,97 +234,112 @@ public:
 
             read_slot = std::span<uint8_t>(read_slot.data(), std::min(read_slot.size(), dma_buffer_size_));
 
-            // Apply volume on both channels
-            if (VOLUME_SCALE_0DB != volume_scale_)
-            {
-                for (size_t i = 0; i + 3 < read_slot.size(); i += 4)
-                {
-                    // Safer access with explicit alignment check
-                    if (reinterpret_cast<uintptr_t>(&read_slot[i]) % 2 != 0 ||
-                            reinterpret_cast<uintptr_t>(&read_slot[i + 2]) % 2 != 0)
-                    {
-                        ESP_LOGW(TAG, "Unaligned audio data detected");
-                        continue;
-                    }
+            // // Apply volume on both channels
+            // if (VOLUME_SCALE_0DB != volume_scale_)
+            // {
+            //     for (size_t i = 0; i + 3 < read_slot.size(); i += 4)
+            //     {
+            //         // Safer access with explicit alignment check
+            //         if (reinterpret_cast<uintptr_t>(&read_slot[i]) % 2 != 0 ||
+            //                 reinterpret_cast<uintptr_t>(&read_slot[i + 2]) % 2 != 0)
+            //         {
+            //             ESP_LOGW(TAG, "Unaligned audio data detected");
+            //             continue;
+            //         }
 
-                    int16_t& left = *reinterpret_cast<int16_t*>(&read_slot[i]);
-                    int16_t& right = *reinterpret_cast<int16_t*>(&read_slot[i + 2]);
+            //         int16_t& left = *reinterpret_cast<int16_t*>(&read_slot[i]);
+            //         int16_t& right = *reinterpret_cast<int16_t*>(&read_slot[i + 2]);
 
-                    // Fixed-point multiplication
-                    left = (static_cast<int32_t>(left) * volume_scale_) >> 15;
-                    right = (static_cast<int32_t>(right) * volume_scale_) >> 15;
-                }
-            }
+            //         // Fixed-point multiplication
+            //         left = (static_cast<int32_t>(left) * volume_scale_) >> 15;
+            //         right = (static_cast<int32_t>(right) * volume_scale_) >> 15;
+            //     }
+            // }
 
-            // Handle muting
-            if (muted_)
-            {
-                memset(read_slot.data(), 0, read_slot.size());
-            }
+            // // Handle muting
+            // if (muted_)
+            // {
+            //     memset(read_slot.data(), 0, read_slot.size());
+            // }
 
-            // Mix with beep data
-            auto beep_data = beep_.consume_data(read_slot.size());
-            if (beep_data.size() > 0)
-            {
-                ESP_LOGD(TAG, "Mixing beep data");
-                for (size_t i = 0; i < beep_data.size(); i += 4)
-                {
-                    const int16_t& left = *reinterpret_cast<const int16_t*>(&beep_data[i]);
-                    const int16_t& right = *reinterpret_cast<const int16_t*>(&beep_data[i + 2]);
+            // // Mix with beep data
+            // auto beep_data = beep_.consume_data(read_slot.size());
+            // if (beep_data.size() > 0)
+            // {
+            //     ESP_LOGD(TAG, "Mixing beep data");
+            //     for (size_t i = 0; i < beep_data.size(); i += 4)
+            //     {
+            //         const int16_t& left = *reinterpret_cast<const int16_t*>(&beep_data[i]);
+            //         const int16_t& right = *reinterpret_cast<const int16_t*>(&beep_data[i + 2]);
 
-                    int16_t& left_out = *reinterpret_cast<int16_t*>(&read_slot[i]);
-                    int16_t& right_out = *reinterpret_cast<int16_t*>(&read_slot[i + 2]);
+            //         int16_t& left_out = *reinterpret_cast<int16_t*>(&read_slot[i]);
+            //         int16_t& right_out = *reinterpret_cast<int16_t*>(&read_slot[i + 2]);
 
-                    left_out += (static_cast<int32_t>(left));
-                    right_out += (static_cast<int32_t>(right));
+            //         left_out += (static_cast<int32_t>(left));
+            //         right_out += (static_cast<int32_t>(right));
 
-                }
-            }
+            //     }
+            // }
 
-            // Mix with start beep data
-            beep_data = start_beep_.consume_data(read_slot.size());
-            if (beep_data.size() > 0)
-            {
-                ESP_LOGD(TAG, "Mixing start beep data");
-                for (size_t i = 0; i < beep_data.size(); i += 4)
-                {
-                    const int16_t& left = *reinterpret_cast<const int16_t*>(&beep_data[i]);
-                    const int16_t& right = *reinterpret_cast<const int16_t*>(&beep_data[i + 2]);
+            // // Mix with start beep data
+            // beep_data = start_beep_.consume_data(read_slot.size());
+            // if (beep_data.size() > 0)
+            // {
+            //     ESP_LOGD(TAG, "Mixing start beep data");
+            //     for (size_t i = 0; i < beep_data.size(); i += 4)
+            //     {
+            //         const int16_t& left = *reinterpret_cast<const int16_t*>(&beep_data[i]);
+            //         const int16_t& right = *reinterpret_cast<const int16_t*>(&beep_data[i + 2]);
 
-                    int16_t& left_out = *reinterpret_cast<int16_t*>(&read_slot[i]);
-                    int16_t& right_out = *reinterpret_cast<int16_t*>(&read_slot[i + 2]);
+            //         int16_t& left_out = *reinterpret_cast<int16_t*>(&read_slot[i]);
+            //         int16_t& right_out = *reinterpret_cast<int16_t*>(&read_slot[i + 2]);
 
-                    left_out += (static_cast<int32_t>(left));
-                    right_out += (static_cast<int32_t>(right));
+            //         left_out += (static_cast<int32_t>(left));
+            //         right_out += (static_cast<int32_t>(right));
 
-                }
-            }
+            //     }
+            // }
 
-            // Mix with volume beep data
-            beep_data = volume_beep_.consume_data(read_slot.size());
-            if (beep_data.size() > 0)
-            {
-                ESP_LOGD(TAG, "Mixing volume beep data");
-                for (size_t i = 0; i < beep_data.size(); i += 4)
-                {
-                    const int16_t& left = *reinterpret_cast<const int16_t*>(&beep_data[i]);
-                    const int16_t& right = *reinterpret_cast<const int16_t*>(&beep_data[i + 2]);
+            // // Mix with volume beep data
+            // beep_data = volume_beep_.consume_data(read_slot.size());
+            // if (beep_data.size() > 0)
+            // {
+            //     ESP_LOGD(TAG, "Mixing volume beep data");
+            //     for (size_t i = 0; i < beep_data.size(); i += 4)
+            //     {
+            //         const int16_t& left = *reinterpret_cast<const int16_t*>(&beep_data[i]);
+            //         const int16_t& right = *reinterpret_cast<const int16_t*>(&beep_data[i + 2]);
 
-                    int16_t& left_out = *reinterpret_cast<int16_t*>(&read_slot[i]);
-                    int16_t& right_out = *reinterpret_cast<int16_t*>(&read_slot[i + 2]);
+            //         int16_t& left_out = *reinterpret_cast<int16_t*>(&read_slot[i]);
+            //         int16_t& right_out = *reinterpret_cast<int16_t*>(&read_slot[i + 2]);
 
-                    left_out += (static_cast<int32_t>(left));
-                    right_out += (static_cast<int32_t>(right));
+            //         left_out += (static_cast<int32_t>(left));
+            //         right_out += (static_cast<int32_t>(right));
 
-                }
-            }
+            //     }
+            // }
 
             if (ESP_OK == i2s_channel_write(handle_, read_slot.data(), read_slot.size(), &wrote, portMAX_DELAY))
             {
-                ESP_LOGD(TAG, "Wrote %d bytes", wrote);
-                ESP_LOGD(TAG, "  - In seconds: %f", (wrote / 2.0) / (sample_rate_ * 1.0));
+                ESP_LOGI(TAG, "Wrote %d bytes", wrote);
+                ESP_LOGI(TAG, "  - In seconds: %f", (wrote / 2.0) / (sample_rate_ * 1.0));
                 data.commit_read(wrote);
                 read_slot = data.max_read_slot();
+
+                // Trim to multiple of 4 bytes (stereo 16-bit samples)
+                if (read_slot.size() >= 4 && read_slot.size() % 4 != 0)
+                {
+                    size_t trimmed_size = read_slot.size() - (read_slot.size() % 4);
+                    ESP_LOGD(TAG, "Trimming data from %zu to %zu bytes to align to 4-byte boundary",
+                            read_slot.size(), trimmed_size);
+                    read_slot = std::span<uint8_t>(read_slot.data(), trimmed_size);
+                }
+                else if (read_slot.size() < 4 && read_slot.size() > 0)
+                {
+                    ESP_LOGW(TAG, "Not enough data to write, size: %zu bytes", read_slot.size());
+                    data.commit_read(read_slot.size());
+                    return;
+                }
             }
             else
             {

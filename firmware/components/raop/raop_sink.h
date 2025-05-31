@@ -9,6 +9,10 @@
 #ifndef RAOP_SINK_H
 #define RAOP_SINK_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <stdarg.h>
 
@@ -18,23 +22,17 @@ typedef enum { 	RAOP_SETUP, RAOP_STREAM, RAOP_PLAY, RAOP_FLUSH, RAOP_METADATA, R
 				RAOP_VOLUME, RAOP_TIMING, RAOP_PREV, RAOP_NEXT, RAOP_REW, RAOP_FWD,
 				RAOP_VOLUME_UP, RAOP_VOLUME_DOWN, RAOP_RESUME, RAOP_TOGGLE } raop_event_t ;
 
-typedef bool (*raop_cmd_cb_t)(raop_event_t event, ...);
-typedef bool (*raop_cmd_vcb_t)(raop_event_t event, va_list args);
-typedef void (*raop_data_cb_t)(const u8_t *data, size_t len, u32_t playtime);
+typedef bool (*raop_cmd_cb_t)(void * cb_args, raop_event_t event, ...);
+typedef bool (*raop_cmd_vcb_t)(void * cb_args, raop_event_t event, va_list args);
+typedef void (*raop_data_cb_t)(void * cb_args, const u8_t *data, size_t len, u32_t playtime);
 
 /**
  * @brief     init sink mode (need to be provided)
  */
-void raop_sink_init(raop_cmd_vcb_t cmd_cb, raop_data_cb_t data_cb, const char *sink_name);
+void raop_sink_init(raop_cmd_vcb_t cmd_cb, raop_data_cb_t data_cb, const char *sink_name, uint32_t ip, void *args);
 
-/**
- * @brief     deinit sink mode (need to be provided)
- */
-void raop_sink_deinit(void);
-
-/**
- * @brief     force disconnection
- */
-void raop_disconnect(void);
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* RAOP_SINK_H*/

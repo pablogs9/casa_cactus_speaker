@@ -1,9 +1,13 @@
 #include <stdio.h>
 #include <span>
+#include <stdlib.h>
 
 #include <esp_log.h>
+#include <esp_heap_caps.h>
 #include <nvs_flash.h>
 #include <mdns.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include <WifiManager.hpp>
 #include <SongPlayer.hpp>
@@ -11,6 +15,7 @@
 #include <ButtonController.hpp>
 #include <RotaryController.hpp>
 #include <SongsProvider.hpp>
+#include <RAOPPlayer.hpp>
 
 void player_task(
         void* arg)
@@ -144,5 +149,44 @@ extern "C" void app_main(
     // ------------------------
     // Application Logic
     // ------------------------
-    xTaskCreate(player_task, "ControllerTask", 4096, NULL, 6, NULL);
+    // xTaskCreate(player_task, "ControllerTask", 4096, NULL, 6, NULL);
+
+    I2SSink sink;
+    RAOPPlayer raop_player(sink, wifi_manager);
+
+    // Wait forever
+    while(true)
+    {
+        // // Print all tasks info every second
+        // ESP_LOGI("app_main", "\n=== TASK INFORMATION ===");
+
+        // // Get task list with state information
+        // char* task_list_buffer = (char*)malloc(2048);
+        // if (task_list_buffer != NULL) {
+        //     //Print header
+        //     snprintf(task_list_buffer, 2048, "Task Name\tState\tPriority\tStack\tCore\n");
+        //     ESP_LOGI("app_main", "Task List Header:\n%s", task_list_buffer);
+        //     vTaskList(task_list_buffer);
+        //     ESP_LOGI("app_main", "Task List:\n%s", task_list_buffer);
+        //     free(task_list_buffer);
+        // }
+
+        // // Get runtime statistics
+        // char* stats_buffer = (char*)malloc(2048);
+        // if (stats_buffer != NULL) {
+        //     // Print header
+        //     snprintf(stats_buffer, 2048, "Task Name\tTime (ms)\tCount\tMax Stack\tCore\n");
+        //     ESP_LOGI("app_main", "Runtime Stats Header:\n%s", stats_buffer);
+        //     vTaskGetRunTimeStats(stats_buffer);
+        //     ESP_LOGI("app_main", "Runtime Stats:\n%s", stats_buffer);
+        //     free(stats_buffer);
+        // }
+
+        // // Print number of tasks and free heap
+        // ESP_LOGI("app_main", "Number of tasks: %u", uxTaskGetNumberOfTasks());
+        // ESP_LOGI("app_main", "Free heap size: %lu bytes", esp_get_free_heap_size());
+        // ESP_LOGI("app_main", "Minimum free heap size: %lu bytes", esp_get_minimum_free_heap_size());
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
 }

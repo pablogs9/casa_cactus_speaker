@@ -12,8 +12,8 @@ typedef struct {
 rtp_resp_t 			rtp_init(struct in_addr host, int latency,
 							char *aeskey, char *aesiv, char *fmtpstr,
 							short unsigned pCtrlPort, short unsigned pTimingPort,
-							uint8_t *buffer, size_t size, 
-							raop_cmd_cb_t cmd_cb, raop_data_cb_t data_cb);
+							uint8_t *buffer, size_t size,
+							raop_cmd_cb_t cmd_cb, raop_data_cb_t data_cb, void *cb_args);
 void			 	rtp_end(struct rtp_s *ctx);
 bool 				rtp_flush(struct rtp_s *ctx, unsigned short seqno, unsigned rtptime, bool exit_locked);
 void				rtp_flush_release(struct rtp_s *ctx);

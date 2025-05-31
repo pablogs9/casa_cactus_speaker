@@ -45,7 +45,8 @@ int gettimeofday(struct timeval *tv, struct timezone *tz);
 char *strcasestr(const char *haystack, const char *needle);
 
 #define usleep(x) 		Sleep((x)/1000)
-#define sleep(x) 		Sleep((x)*1000)
+
+#define sleep(x) 		Sleep((x)*1000)
 #define last_error() 	WSAGetLastError()
 #define ERROR_WOULDBLOCK WSAEWOULDBLOCK
 #define open 			_open
@@ -106,12 +107,15 @@ char *strlwr(char *str);
 typedef struct ntp_s {
 	u32_t seconds;
 	u32_t fraction;
-} ntp_t;
+
+} ntp_t;
 
 u64_t timeval_to_ntp(struct timeval tv, struct ntp_s *ntp);
 u64_t get_ntp(struct ntp_s *ntp);
 // we expect somebody to provide the ms clock, system-wide
-u32_t _gettime_ms_(void);
-#define gettime_ms _gettime_ms_
+static inline u32_t gettime_ms(void)
+{
+    return esp_timer_get_time() / 1000;
+}
 
 #endif     // __PLATFORM

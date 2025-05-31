@@ -25,7 +25,11 @@
 #include "mdns.h"
 #include "mbedtls/version.h"
 #include <mbedtls/x509.h>
-#include <mbedtls/psa_util.h>
+#include "mbedtls/build_info.h"
+#include "mbedtls/ctr_drbg.h"
+#include "mbedtls/entropy.h"
+#include "mbedtls/pk.h"
+#include "mbedtls/rsa.h"
 #endif
 
 #include "util.h"
@@ -34,8 +38,9 @@
 #include "dmap_parser.h"
 #include "log_util.h"
 
-#define RTSP_STACK_SIZE 	(8*1024)
+#define RTSP_STACK_SIZE 	(40*1024)
 #define SEARCH_STACK_SIZE	(3*1024)
+#define RAOP_CORE_AFFINITY  0
 
 typedef struct raop_ctx_s {
 #ifdef WIN32
@@ -68,6 +73,7 @@ typedef struct raop_ctx_s {
 	struct rtp_s *rtp;
 	raop_cmd_cb_t	cmd_cb;
 	raop_data_cb_t	data_cb;
+    void * cb_args;
 	struct {
 		char				DACPid[32], id[32];
 		struct in_addr		host;
@@ -87,8 +93,6 @@ typedef struct raop_ctx_s {
 } raop_ctx_t;
 
 extern struct mdnsd* glmDNSServer;
-extern log_level	raop_loglevel;
-static log_level 	*loglevel = &raop_loglevel;
 
 #ifdef WIN32
 static void*	rtsp_thread(void *arg);
@@ -115,18 +119,11 @@ static void on_dmap_string(void *ctx, const char *code, const char *name, const 
 /*----------------------------------------------------------------------------*/
 struct raop_ctx_s *raop_create(uint32_t host, const char *name,
 						unsigned char mac[6], int latency,
-						raop_cmd_cb_t cmd_cb, raop_data_cb_t data_cb) {
+						raop_cmd_cb_t cmd_cb, raop_data_cb_t data_cb, void *cb_args) {
 	struct raop_ctx_s *ctx = malloc(sizeof(struct raop_ctx_s));
 	struct sockaddr_in addr;
 	char id[64];
 
-#ifdef WIN32
-	socklen_t nlen = sizeof(struct sockaddr);
-	char *txt[] = { "am=airesp32", "tp=UDP", "sm=false", "sv=false", "ek=1",
-					"et=0,1", "md=0,1,2", "cn=0,1", "ch=2",
-					"ss=16", "sr=44100", "vn=3", "txtvers=1",
-					NULL };
-#else
 	const mdns_txt_item_t txt[] = {
 		{"am", "airesp32"},
 		{"tp", "UDP"},
@@ -143,8 +140,6 @@ struct raop_ctx_s *raop_create(uint32_t host, const char *name,
 		{"txtvers","1"},
 	};
 
-#endif
-
 	if (!ctx) return NULL;
 
 	// make sure we have a clean context
@@ -157,9 +152,10 @@ struct raop_ctx_s *raop_create(uint32_t host, const char *name,
 	ctx->sock = socket(AF_INET, SOCK_STREAM, 0);
 	ctx->cmd_cb = cmd_cb;
 	ctx->data_cb = data_cb;
+    ctx->cb_args = cb_args;
 	ctx->latency = min(latency, 88200);
 	if (ctx->sock == -1) {
-		LOG_ERROR("Cannot create listening socket", NULL);
+		LOG_ERROR("Cannot create listening socket");
 		free(ctx);
 		return NULL;
 	}
@@ -204,7 +200,7 @@ struct raop_ctx_s *raop_create(uint32_t host, const char *name,
 
     ctx->xTaskBuffer = (StaticTask_t*) heap_caps_malloc(sizeof(StaticTask_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 	ctx->thread = xTaskCreateStaticPinnedToCore( (TaskFunction_t) rtsp_thread, "RTSP", RTSP_STACK_SIZE, ctx,
-												 ESP_TASK_PRIO_MIN + 2, ctx->xStack, ctx->xTaskBuffer, CONFIG_PTHREAD_TASK_CORE_DEFAULT);
+												 5, ctx->xStack, ctx->xTaskBuffer, RAOP_CORE_AFFINITY);
 #endif
 
 	return ctx;
@@ -441,15 +437,18 @@ static bool handle_rtsp(raop_ctx_t *ctx, int sock)
 		return false;
 	}
 
+    // Print the whole message
+    printf("------\nRTSP Request [%s]:\n%s\n", method, body ? body : "No body");
+
 	if (strcmp(method, "OPTIONS")) {
 		LOG_INFO("[%p]: received %s", ctx, method);
 	}
 
 	if ((buf = kd_lookup(headers, "Apple-Challenge")) != NULL) {
+        printf("Got Apple-Challenge: %s\n", buf);
 		int n;
 		char *buf_pad, *p, *data_b64 = NULL, data[32];
 
-		LOG_INFO("[%p]: challenge %s", ctx, buf);
 
 		// try to re-acquire IP address if we were missing it
 		if (S_ADDR(ctx->host) == INADDR_ANY) {
@@ -464,17 +463,17 @@ static bool handle_rtsp(raop_ctx_t *ctx, int sock)
 		p = (char*) memcpy(p, &S_ADDR(ctx->host), 4) + 4;
 		p = (char*) memcpy(p, ctx->mac, 6) + 6;
 		memset(p, 0, 32 - (p - data));
-		p = rsa_apply((unsigned char*) data, 32, &n, RSA_MODE_AUTH);
-		n = base64_encode(p, n, &data_b64);
+        p = rsa_apply((unsigned char*) data, 32, &n, RSA_MODE_AUTH);
+        n = base64_encode(p, n, &data_b64);
 
-		// remove padding as well (seems to be optional now)
-		for (n = strlen(data_b64) - 1; n > 0 && data_b64[n] == '='; data_b64[n--] = '\0');
+        // remove padding as well (seems to be optional now)
+        for (n = strlen(data_b64) - 1; n > 0 && data_b64[n] == '='; data_b64[n--] = '\0');
 
-		kd_add(resp, "Apple-Response", data_b64);
+        kd_add(resp, "Apple-Response", data_b64);
 
-		NFREE(p);
-		NFREE(buf_pad);
-		NFREE(data_b64);
+        NFREE(p);
+        NFREE(buf_pad);
+        NFREE(data_b64);
 	}
 
 	if (!strcmp(method, "OPTIONS")) {
@@ -531,8 +530,8 @@ static bool handle_rtsp(raop_ctx_t *ctx, int sock)
 		ctx->active_remote.destroy_mutex = xSemaphoreCreateBinary();
 		ctx->active_remote.xTaskBuffer = (StaticTask_t*) heap_caps_malloc(sizeof(StaticTask_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 		ctx->active_remote.thread = xTaskCreateStaticPinnedToCore( (TaskFunction_t) search_remote, "search_remote", SEARCH_STACK_SIZE, ctx,
-																	ESP_TASK_PRIO_MIN + 2, ctx->active_remote.xStack, ctx->active_remote.xTaskBuffer,
-																	CONFIG_PTHREAD_TASK_CORE_DEFAULT );
+																	5, ctx->active_remote.xStack, ctx->active_remote.xTaskBuffer,
+																	RAOP_CORE_AFFINITY );
 #endif
 
 	} else if (!strcmp(method, "SETUP") && ((buf = kd_lookup(headers, "Transport")) != NULL)) {
@@ -543,13 +542,13 @@ static bool handle_rtsp(raop_ctx_t *ctx, int sock)
 		size_t size = 0;
 
 		// we are about to stream, do something if needed and optionally give buffers to play with
-		success = ctx->cmd_cb(RAOP_SETUP, &buffer, &size);
+		success = ctx->cmd_cb(ctx->cb_args, RAOP_SETUP, &buffer, &size);
 
 		if ((p = strcasestr(buf, "timing_port")) != NULL) sscanf(p, "%*[^=]=%hu", &tport);
 		if ((p = strcasestr(buf, "control_port")) != NULL) sscanf(p, "%*[^=]=%hu", &cport);
 
 		rtp = rtp_init(ctx->peer, ctx->latency,	ctx->rtsp.aeskey, ctx->rtsp.aesiv,
-					   ctx->rtsp.fmtp, cport, tport, buffer, size, ctx->cmd_cb, ctx->data_cb);
+					   ctx->rtsp.fmtp, cport, tport, buffer, size, ctx->cmd_cb, ctx->data_cb, ctx->cb_args);
 
 		ctx->rtp = rtp.ctx;
 
@@ -582,7 +581,7 @@ static bool handle_rtsp(raop_ctx_t *ctx, int sock)
 
 		if (ctx->rtp) rtp_record(ctx->rtp, seqno, rtptime);
 
-		success = ctx->cmd_cb(RAOP_STREAM);
+		success = ctx->cmd_cb(ctx->cb_args, RAOP_STREAM);
 
 	}  else if (!strcmp(method, "FLUSH")) {
 		unsigned short seqno = 0;
@@ -595,14 +594,14 @@ static bool handle_rtsp(raop_ctx_t *ctx, int sock)
 
 		// only send FLUSH if useful (discards frames above buffer head and top)
 		if (ctx->rtp && rtp_flush(ctx->rtp, seqno, rtptime, true)) {
-			success = ctx->cmd_cb(RAOP_FLUSH);
+			success = ctx->cmd_cb(ctx->cb_args, RAOP_FLUSH);
 			rtp_flush_release(ctx->rtp);
 		}
 
 	}  else if (!strcmp(method, "TEARDOWN")) {
 
 		cleanup_rtsp(ctx, false);
-		success = ctx->cmd_cb(RAOP_STOP);
+		success = ctx->cmd_cb(ctx->cb_args, RAOP_STOP);
 
 	} else if (!strcmp(method, "SET_PARAMETER")) {
 		char *p;
@@ -613,7 +612,7 @@ static bool handle_rtsp(raop_ctx_t *ctx, int sock)
 			sscanf(p, "%*[^:]:%f", &volume);
 			LOG_INFO("[%p]: SET PARAMETER volume %f", ctx, volume);
 			volume = (volume == -144.0) ? 0 : (1 + volume / 30);
-			success = ctx->cmd_cb(RAOP_VOLUME, volume);
+			success = ctx->cmd_cb(ctx->cb_args, RAOP_VOLUME, volume);
 		} else if (body && (p = strcasestr(body, "progress")) != NULL) {
 			int start, current, stop = 0;
 
@@ -622,7 +621,7 @@ static bool handle_rtsp(raop_ctx_t *ctx, int sock)
 			current = ((current - start) / 44100) * 1000;
 			if (stop) stop = ((stop - start) / 44100) * 1000;
 			LOG_INFO("[%p]: SET PARAMETER progress %d/%u %s", ctx, current, stop, p);
-			success = ctx->cmd_cb(RAOP_PROGRESS, max(current, 0), stop);
+			success = ctx->cmd_cb(ctx->cb_args, RAOP_PROGRESS, max(current, 0), stop);
 		} else if (body && ((p = kd_lookup(headers, "Content-Type")) != NULL) && !strcasecmp(p, "application/x-dmap-tagged")) {
 			struct metadata_s metadata;
 			dmap_settings settings = {
@@ -635,17 +634,17 @@ static bool handle_rtsp(raop_ctx_t *ctx, int sock)
 			if (!dmap_parse(&settings, body, len)) {
                 uint32_t timestamp = 0;
                 if ((p = kd_lookup(headers, "RTP-Info")) != NULL) sscanf(p, "%*[^=]=%ld", &timestamp);
-				LOG_INFO("[%p]: received metadata (ts: %d)\n\tartist: %s\n\talbum:  %s\n\ttitle:  %s",
+				LOG_INFO("[%p]: received metadata (ts: %lu)\n\tartist: %s\n\talbum:  %s\n\ttitle:  %s",
 						 ctx, timestamp, metadata.artist ? metadata.artist : "", metadata.album ? metadata.album : "",
                          metadata.title ? metadata.title : "");
-                success = ctx->cmd_cb(RAOP_METADATA, metadata.artist, metadata.album, metadata.title, timestamp);
+                success = ctx->cmd_cb(ctx->cb_args, RAOP_METADATA, metadata.artist, metadata.album, metadata.title, timestamp);
 				free_metadata(&metadata);
 			}
 		} else if (body && ((p = kd_lookup(headers, "Content-Type")) != NULL) && strcasestr(p, "image/jpeg")) {
             uint32_t timestamp = 0;
             if ((p = kd_lookup(headers, "RTP-Info")) != NULL) sscanf(p, "%*[^=]=%ld", &timestamp);
-            LOG_INFO("[%p]: received JPEG image of %d bytes (ts:%d)", ctx, len, timestamp);
-			ctx->cmd_cb(RAOP_ARTWORK, body, len, timestamp);
+            LOG_INFO("[%p]: received JPEG image of %d bytes (ts:%lu)", ctx, len, timestamp);
+			ctx->cmd_cb(ctx->cb_args, RAOP_ARTWORK, body, len, timestamp);
 		} else {
 			char *dump = kd_dump(headers);
 			LOG_INFO("Unhandled SET PARAMETER\n%s", dump);
@@ -658,8 +657,10 @@ static bool handle_rtsp(raop_ctx_t *ctx, int sock)
 	kd_add(resp, "CSeq", kd_lookup(headers, "CSeq"));
 
 	if (success) {
+        printf("-> Sending response: 200 OK\n %s", buf ? buf : "");
 		buf = http_send(sock, "RTSP/1.0 200 OK", resp);
 	} else {
+        printf("-> Sending response: 503 ERROR\n");
 		buf = http_send(sock, "RTSP/1.0 503 ERROR", NULL);
 		closesocket(sock);
 	}
@@ -779,9 +780,13 @@ static void search_remote(void *args) {
 
 
 /*----------------------------------------------------------------------------*/
-static char *rsa_apply(unsigned char *input, int inlen, int *outlen, int mode)
+static char *rsa_apply( unsigned char *input,
+                        int               inlen,
+                        int              *outlen,
+                        int                  mode )
 {
-	const static char super_secret_key[] =
+    /* ---- Key material embedded exactly as before ---- */
+    const static char super_secret_key[] =
 	"-----BEGIN RSA PRIVATE KEY-----\n"
 	"MIIEpQIBAAKCAQEA59dE8qLieItsH1WgjrcFRKj6eUWqi+bGLOX1HL3U3GhC/j0Qg90u3sG/1CUt\n"
 	"wC5vOYvfDmFI6oSFXi5ELabWJmT2dKHzBJKa3k9ok+8t9ucRqMd6DZHJ2YCCLlDRKSKv6kDqnw4U\n"
@@ -805,66 +810,105 @@ static char *rsa_apply(unsigned char *input, int inlen, int *outlen, int mode)
 	"LAuE4Pu13aKiJnfft7hIjbK+5kyb3TysZvoyDnb3HOKvInK7vXbKuU4ISgxB2bB3HcYzQMGsz1qJ\n"
 	"2gG0N5hvJpzwwhbhXqFKA4zaaSrw622wDniAK5MlIE0tIAKKP4yxNGjoD2QYjhBGuhvkWKY=\n"
 	"-----END RSA PRIVATE KEY-----";
-#ifdef WIN32
-	unsigned char *out;
-	RSA *rsa;
 
-	BIO *bmem = BIO_new_mem_buf(super_secret_key, -1);
-	rsa = PEM_read_bio_RSAPrivateKey(bmem, NULL, NULL, NULL);
-	BIO_free(bmem);
+    /* ---- RNG initialisation ---- */
+    const char *pers = "rsa_apply";
+    mbedtls_entropy_context   entropy;
+    mbedtls_ctr_drbg_context  ctr_drbg;
 
-	out = malloc(RSA_size(rsa));
-	switch (mode) {
-		case RSA_MODE_AUTH:
-			*outlen = RSA_private_encrypt(inlen, input, out, rsa,
-										  RSA_PKCS1_PADDING);
-			break;
-		case RSA_MODE_KEY:
-			*outlen = RSA_private_decrypt(inlen, input, out, rsa,
-										  RSA_PKCS1_OAEP_PADDING);
-			break;
-	}
+    mbedtls_entropy_init( &entropy );
+    mbedtls_ctr_drbg_init( &ctr_drbg );
 
-	RSA_free(rsa);
+    if( mbedtls_ctr_drbg_seed( &ctr_drbg,
+                               mbedtls_entropy_func, &entropy,
+                               (const unsigned char *)pers,
+                               strlen( pers ) ) != 0 )
+    {
+        return NULL;                           /* entropy failure */
+    }
 
-	return (char*) out;
-#else
-	mbedtls_pk_context pkctx;
-	mbedtls_rsa_context *trsa;
-	size_t olen;
+    /* ---- Load the private key ---- */
+    mbedtls_pk_context pk;
+    mbedtls_pk_init( &pk );
 
-	/*
-	we should do entropy initialization & pass a rng function but this
-	consumes a ton of stack and there is no security concern here. Anyway,
-	mbedtls takes a lot of stack, unfortunately ...
-	*/
+    int rc = mbedtls_pk_parse_key( &pk,
+                                   (const unsigned char *) super_secret_key,
+                                   sizeof( super_secret_key ),
+                                   NULL, 0,
+                                   mbedtls_ctr_drbg_random, &ctr_drbg );
+    if( rc != 0 )
+        goto cleanup;
 
-	mbedtls_pk_init(&pkctx);
-	mbedtls_pk_parse_key(&pkctx, (unsigned char *)super_secret_key,
-		sizeof(super_secret_key), NULL, 0, mbedtls_psa_get_random, MBEDTLS_PSA_RANDOM_STATE);
+    /* ---- Grab the underlying RSA object ---- */
+    mbedtls_rsa_context *rsa = mbedtls_pk_rsa( pk );
+    size_t rsa_len = mbedtls_rsa_get_len( rsa );   /* size in **bytes** */
 
-	uint8_t *outbuf = NULL;
-	trsa = mbedtls_pk_rsa(pkctx);
+    unsigned char *buf = NULL;
+    buf = malloc( rsa_len );
+    if( buf == NULL )
+        goto cleanup;
 
-	switch (mode) {
-	case RSA_MODE_AUTH:
-		mbedtls_rsa_set_padding(trsa, MBEDTLS_RSA_PKCS_V15, MBEDTLS_MD_NONE);
-		outbuf = malloc(mbedtls_rsa_get_len(trsa));
-		mbedtls_rsa_pkcs1_encrypt(trsa, NULL, NULL, inlen, input, outbuf);
-		*outlen = mbedtls_rsa_get_len(trsa);
-		break;
-	case RSA_MODE_KEY:
-		mbedtls_rsa_set_padding(trsa, MBEDTLS_RSA_PKCS_V21, MBEDTLS_MD_SHA1);
-		outbuf = malloc(mbedtls_rsa_get_len(trsa));
-		mbedtls_rsa_pkcs1_decrypt(trsa, NULL, NULL, &olen, input, outbuf, mbedtls_rsa_get_len(trsa));
-		*outlen = olen;
-		break;
-	}
+    switch( mode )
+    {
+        /* ------------------------------------------------------- */
+        case RSA_MODE_AUTH:     /* “encrypt with private key” → sign */
+        {
+            mbedtls_rsa_set_padding( rsa,
+                                     MBEDTLS_RSA_PKCS_V15,
+                                     MBEDTLS_MD_NONE );   /* same style */
 
-	mbedtls_pk_free(&pkctx);
+            rc = mbedtls_rsa_pkcs1_sign( rsa,
+                                         mbedtls_ctr_drbg_random,
+                                         &ctr_drbg,
+                                         MBEDTLS_MD_NONE,
+                                         (unsigned int)inlen,
+                                         input,
+                                         buf );
+            if( rc != 0 )
+                goto cleanup;
 
-	return (char*) outbuf;
-#endif
+            *outlen = rsa_len;          /* always full-size signature */
+            break;
+        }
+
+        /* ------------------------------------------------------- */
+        case RSA_MODE_KEY:      /* OAEP decrypt with private key     */
+        {
+            size_t olen = 0;
+
+            mbedtls_rsa_set_padding( rsa,
+                                     MBEDTLS_RSA_PKCS_V21,
+                                     MBEDTLS_MD_SHA1 );
+
+            rc = mbedtls_rsa_pkcs1_decrypt( rsa,
+                                            mbedtls_ctr_drbg_random, &ctr_drbg,
+                                            &olen,
+                                            input,          /* ciphertext  */
+                                            buf,            /* plaintext   */
+                                            rsa_len );      /* buf size    */
+            if( rc != 0 )
+                goto cleanup;
+
+            *outlen = olen;            /* real plaintext length */
+            break;
+        }
+
+        default:
+            rc = MBEDTLS_ERR_RSA_BAD_INPUT_DATA;
+            goto cleanup;
+    }
+
+    /* normal exit */
+    mbedtls_pk_free( &pk );
+    mbedtls_ctr_drbg_free( &ctr_drbg );
+    mbedtls_entropy_free( &entropy );
+    return (char *)buf;
+
+cleanup:
+    mbedtls_pk_free( &pk );
+    mbedtls_ctr_drbg_free( &ctr_drbg );
+    mbedtls_entropy_free( &entropy );
+    return NULL;
 }
 
 #define DECODE_ERROR 0xffffffff

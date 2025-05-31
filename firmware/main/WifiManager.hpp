@@ -154,6 +154,11 @@ struct WifiManager
         return ip_;
     }
 
+    const uint32_t& get_ip_bytes() const
+    {
+        return ip_bytes_;
+    }
+
     /**
      * @brief Gets the SSID
      *
@@ -300,6 +305,7 @@ private:
             char buffer[40];
             char* ip = esp_ip4addr_ntoa(&event->ip_info.ip, buffer, sizeof(buffer));
             wifi_manager->ip_ = ip;
+            wifi_manager->ip_bytes_ = event->ip_info.ip.addr;
             xEventGroupSetBits(wifi_manager->wifi_event_group_, WIFI_CONNECTED_EVENT);
         }
     }
@@ -309,6 +315,7 @@ private:
     uint32_t retries_ = 0;                       ///< Number of retries
     std::string ssid_;                           ///< SSID
     std::string ip_;                             ///< IP address
+    uint32_t ip_bytes_;                          ///< IP address in bytes
     std::string provisioning_ssid_;              ///< Provisioning SSID
     httpd_handle_t server_;                      ///< HTTP server
 };

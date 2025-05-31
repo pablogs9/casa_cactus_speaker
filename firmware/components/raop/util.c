@@ -28,13 +28,9 @@
 /* globals */
 /*----------------------------------------------------------------------------*/
 
-extern log_level	util_loglevel;
-
 /*----------------------------------------------------------------------------*/
 /* locals */
 /*----------------------------------------------------------------------------*/
-static log_level 		*loglevel = &util_loglevel;
-
 static char *ltrim(char *s);
 static int read_line(int fd, char *line, int maxlen, int timeout);
 
@@ -327,13 +323,13 @@ bool http_parse(int sock, char *method, key_data_t *rkd, char **body, int *len)
 
 	if ((i = read_line(sock, line, sizeof(line), timeout)) <= 0) {
 		if (i < 0) {
-			LOG_ERROR("cannot read method", NULL);
+			LOG_ERROR("cannot read method");
 		}
 		return false;
 	}
 
 	if (!sscanf(line, "%s", method)) {
-		LOG_ERROR("missing method", NULL);
+		LOG_ERROR("missing method");
 		return false;
 	}
 
@@ -341,7 +337,7 @@ bool http_parse(int sock, char *method, key_data_t *rkd, char **body, int *len)
 
 	while (read_line(sock, line, sizeof(line), timeout) > 0) {
 
-		LOG_SDEBUG("sock: %u, received %s", line);
+		LOG_SDEBUG("sock: %u, received %s", sock, line);
 
 		// line folding should be deprecated
 		if (i && rkd[i].key && (line[0] == ' ' || line[0] == '\t')) {
@@ -354,7 +350,7 @@ bool http_parse(int sock, char *method, key_data_t *rkd, char **body, int *len)
 		dp = strstr(line,":");
 
 		if (!dp){
-			LOG_ERROR("Request failed, bad header", NULL);
+			LOG_ERROR("Request failed, bad header");
 			kd_free(rkd);
 			return false;
 		}
