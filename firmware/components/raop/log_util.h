@@ -26,10 +26,10 @@
 
 #include "esp_log.h"
 
-#define LOG_ERROR(fmt, ...)     ESP_LOGE("RAOP", fmt, ##__VA_ARGS__)
-#define LOG_WARN(fmt, ...)      ESP_LOGW("RAOP", fmt, ##__VA_ARGS__)
-#define LOG_INFO(fmt, ...)      ESP_LOGI("RAOP", fmt, ##__VA_ARGS__)
-#define LOG_DEBUG(fmt, ...)     ESP_LOGD("RAOP", fmt, ##__VA_ARGS__)
-#define LOG_SDEBUG(fmt, ...)    ESP_LOGD("RAOP", fmt, ##__VA_ARGS__)
+#define LOG_ERROR(fmt, ...)     // ESP_LOGE("RAOP", fmt, ##__VA_ARGS__)
+#define LOG_WARN(fmt, ...)      // ESP_LOGW("RAOP", fmt, ##__VA_ARGS__)
+#define LOG_INFO(fmt, ...)      // ESP_LOGI("RAOP", fmt, ##__VA_ARGS__)
+#define LOG_DEBUG(fmt, ...)     // ESP_LOGD("RAOP", fmt, ##__VA_ARGS__)
+#define LOG_SDEBUG(fmt, ...)    // ESP_LOGD("RAOP", fmt, ##__VA_ARGS__)
 
 #endif

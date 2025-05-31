@@ -65,8 +65,6 @@ public:
         {
             size_t pushed = xStreamBufferSend(player.stream_buffer_, data, len, pdMS_TO_TICKS(10));
 
-            // ESP_LOGI(player.TAG, "Pushed %zu bytes to stream buffer, total available: %zu bytes",
-            //          pushed, xStreamBufferBytesAvailable(player.stream_buffer_));
             if (pushed == 0)
             {
                 /* Buffer is full – throw away the oldest half-second */
@@ -84,7 +82,7 @@ public:
 
     static bool raop_sink_cmd_handler(void* cb_args, raop_event_t event, va_list args)
     {
-        ESP_LOGE(TAG, "Received event: %s", raop_event_to_string(event));
+        ESP_LOGI(TAG, "Received event: %s", raop_event_to_string(event));
         RAOPPlayer& player = *static_cast<RAOPPlayer*>(cb_args);
 
         switch (event)

@@ -437,15 +437,12 @@ static bool handle_rtsp(raop_ctx_t *ctx, int sock)
 		return false;
 	}
 
-    // Print the whole message
-    printf("------\nRTSP Request [%s]:\n%s\n", method, body ? body : "No body");
-
 	if (strcmp(method, "OPTIONS")) {
 		LOG_INFO("[%p]: received %s", ctx, method);
 	}
 
 	if ((buf = kd_lookup(headers, "Apple-Challenge")) != NULL) {
-        printf("Got Apple-Challenge: %s\n", buf);
+        // printf("Got Apple-Challenge: %s\n", buf);
 		int n;
 		char *buf_pad, *p, *data_b64 = NULL, data[32];
 
@@ -546,8 +543,6 @@ static bool handle_rtsp(raop_ctx_t *ctx, int sock)
 
 		if ((p = strcasestr(buf, "timing_port")) != NULL) sscanf(p, "%*[^=]=%hu", &tport);
 		if ((p = strcasestr(buf, "control_port")) != NULL) sscanf(p, "%*[^=]=%hu", &cport);
-
-        printf("RTP init with buffer size %d\n", (int)size);
 
 		rtp = rtp_init(ctx->peer, ctx->latency,	ctx->rtsp.aeskey, ctx->rtsp.aesiv,
 					   ctx->rtsp.fmtp, cport, tport, buffer, size, ctx->cmd_cb, ctx->data_cb, ctx->cb_args);
@@ -659,10 +654,8 @@ static bool handle_rtsp(raop_ctx_t *ctx, int sock)
 	kd_add(resp, "CSeq", kd_lookup(headers, "CSeq"));
 
 	if (success) {
-        printf("-> Sending response: 200 OK\n %s", buf ? buf : "");
 		buf = http_send(sock, "RTSP/1.0 200 OK", resp);
 	} else {
-        printf("-> Sending response: 503 ERROR\n");
 		buf = http_send(sock, "RTSP/1.0 503 ERROR", NULL);
 		closesocket(sock);
 	}

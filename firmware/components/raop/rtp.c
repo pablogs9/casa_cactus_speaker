@@ -388,12 +388,6 @@ rtp_resp_t rtp_init(struct in_addr host, int latency, char *aeskey, char *aesiv,
 	memset(fmtp, 0, sizeof(fmtp));
 	while ((arg = strsep(&fmtpstr, " \t")) != NULL) fmtp[i++] = atoi(arg);
 
-    printf("RTP fmtp: ");
-    for (int j = 0; j < i; j++) {
-        printf("%d ", fmtp[j]);
-    }
-    printf("\n");
-
 	ctx->frame_size = fmtp[1];
 	ctx->frame_duration = (ctx->frame_size * 1000) / RAOP_SAMPLE_RATE;
 
