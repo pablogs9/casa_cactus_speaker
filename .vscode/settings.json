@@ -80,6 +80,7 @@
         "streambuf": "cpp",
         "thread": "cpp",
         "cinttypes": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "alac_wrapper.h": "c"
     }
 }
