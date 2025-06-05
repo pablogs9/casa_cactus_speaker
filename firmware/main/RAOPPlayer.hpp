@@ -30,10 +30,13 @@ public:
 
         raop_buffer_ = (uint8_t*)heap_caps_malloc(RAOP_OUTPUT_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 
-        if (stream_buffer_ == nullptr)
+        // Create playing semaphore (binary semaphore, initially not given)
+        playing_semaphore_ = xSemaphoreCreateBinary();
+
+        if (stream_buffer_ == nullptr || playing_semaphore_ == nullptr)
         {
-            ESP_LOGE(TAG, "Failed to create stream buffer");
-            // Wait forever if we can't create the buffer
+            ESP_LOGE(TAG, "Failed to create stream buffer or playing semaphore");
+            // Wait forever if we can't create the buffer or semaphore
             vTaskDelay(portMAX_DELAY);
         }
 
@@ -97,6 +100,24 @@ public:
 
             break;
         }
+        case RAOP_VOLUME:
+        {
+            float volume = va_arg(args, double);
+			ESP_LOGI(TAG, "Volume[0..1] %0.4f", volume);
+            player.sink.set_volume_scale(volume);
+            break;
+        }
+        case RAOP_PLAY:
+        {
+            xSemaphoreGive(player.playing_semaphore_);
+            break;
+        }
+        case RAOP_STOP:
+        {
+            // Take the semaphore to indicate stop (if it's available)
+            xSemaphoreTake(player.playing_semaphore_, 0);
+            break;
+        }
         default:
             break;
         }
@@ -119,6 +140,17 @@ public:
 
         while (true)
         {
+            // Check if we're playing by trying to take the semaphore with a short timeout
+            if (xSemaphoreTake(player.playing_semaphore_, pdMS_TO_TICKS(10)) != pdTRUE)
+            {
+                // Not playing, yield and continue
+                taskYIELD();
+                continue;
+            }
+
+            // We're playing, give the semaphore back so it stays available
+            xSemaphoreGive(player.playing_semaphore_);
+
             /* Prime: wait until at least a half of the buffer is filled */
             if (!primed)
             {
@@ -164,4 +196,6 @@ public:
 
     static constexpr size_t RAOP_OUTPUT_SIZE = 1024 * 10; // 10kB for RAOP output buffer
     uint8_t * raop_buffer_ = nullptr; // Buffer for RAOP data
+
+    SemaphoreHandle_t playing_semaphore_ = nullptr;
 };

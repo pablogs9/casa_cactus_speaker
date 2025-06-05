@@ -131,6 +131,20 @@ public:
         }
     }
 
+    void set_volume_scale(
+            float volume_scale)
+    {
+        if (volume_scale == 0)
+        {
+            volume_scale_ = 0;
+        }
+        else
+        {
+            // Use uint32_t to avoid overflow for high volumes
+            volume_scale_ = static_cast<uint32_t>(32768 * volume_scale);
+        }
+    }
+
     int8_t get_volume()
     {
         return volume_db_;
@@ -209,10 +223,39 @@ public:
     }
 
     void direct_write(
-            const uint8_t* data,
+            uint8_t* data,
             size_t size)
     {
         size_t wrote = 0;
+
+        // Apply volume on both channels
+        if (VOLUME_SCALE_0DB != volume_scale_)
+        {
+            for (size_t i = 0; i + 3 < size; i += 4)
+            {
+                // Safer access with explicit alignment check
+                if (reinterpret_cast<uintptr_t>(&data[i]) % 2 != 0 ||
+                        reinterpret_cast<uintptr_t>(&data[i + 2]) % 2 != 0)
+                {
+                    ESP_LOGW(TAG, "Unaligned audio data detected");
+                    continue;
+                }
+
+                int16_t& left = *reinterpret_cast<int16_t*>(&data[i]);
+                int16_t& right = *reinterpret_cast<int16_t*>(&data[i + 2]);
+
+                // Fixed-point multiplication
+                left = (static_cast<int32_t>(left) * volume_scale_) >> 15;
+                right = (static_cast<int32_t>(right) * volume_scale_) >> 15;
+            }
+        }
+
+        // Handle muting
+        if (muted_)
+        {
+            memset(data, 0, size);
+        }
+
         if (ESP_OK != i2s_channel_write(handle_, data, size, &wrote, portMAX_DELAY))
         {
             ESP_LOGE(TAG, "Error writing to I2S");
