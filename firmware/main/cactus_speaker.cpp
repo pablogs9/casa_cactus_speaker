@@ -20,7 +20,7 @@
 void player_task(
         void* arg)
 {
-    I2SSink sink;
+    I2SSink & sink  = *static_cast<I2SSink*>(arg);
     SongsProvider songs_provider;
 
     ButtonController button_controller;
@@ -149,9 +149,10 @@ extern "C" void app_main(
     // ------------------------
     // Application Logic
     // ------------------------
-    // xTaskCreate(player_task, "ControllerTask", 4096, NULL, 6, NULL);
-
     I2SSink sink;
+
+    // xTaskCreate(player_task, "ControllerTask", 4096, &sink, 6, NULL);
+
     RAOPPlayer raop_player(sink, wifi_manager);
 
     // Wait forever

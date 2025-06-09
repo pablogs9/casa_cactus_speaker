@@ -100,6 +100,14 @@ public:
 
             break;
         }
+        case RAOP_PROGRESS:
+        {
+            // Clean the buffer
+            xSemaphoreTake(player.playing_semaphore_, portMAX_DELAY);
+            xStreamBufferReset(player.stream_buffer_); // This will clear the buffer
+            xSemaphoreGive(player.playing_semaphore_);
+            break;
+        }
         case RAOP_VOLUME:
         {
             float volume = va_arg(args, double);
