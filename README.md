@@ -9,5 +9,6 @@ Created for a Makespace Madrid session to demonstrate a complete PCB design work
 
 **Companion slides: [here](https://docs.google.com/presentation/d/1glYFRo9XCKRI-qDjp1DA8M3mJohLk-lrxx0JoBPsboM/edit#slide=id.p)**
 
+
 ![PCB](images/PCB.png)
 ![Schematic](images/SCH.png)
